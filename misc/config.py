@@ -19,15 +19,12 @@ worker_script = os.path.join(script_dir, "trade", "order_worker.py")
 gui = None
 
 # LIVE
-apiKey = "1OXfkc8fLPBtw2mqrt1HDbhiopoFQd6OSNVp7LEZkaaA1FG95P2bQyUfsPEkAdbp"
-secret = "mo6rnlXm0vK89wzRdj1NoIpbzF8U8TYhfLHRN7XEZYU9H3vBt7mkjwIUA4yAl78Q"
+import os
 
-# TEST
-#apiKey = "53LxLYiJOYn5AGg7v4GybKm1kVlCFdthEHxmGxvztfHA0OLAosbJGrs0IRhqa7vI"
-#secret = "FpIuQJ1RAlid8lWuXJXPiGwPEogq4ndvOLnbm4wpBCpRiWoFO5oW2WNAQ8tsELFl"
+BINANCE_API_KEY    = os.getenv("BINANCE_API_KEY")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
-client = Client(apiKey, secret, {"timeout": 60})
-#client.API_URL = 'https://testnet.binance.vision/api'
+client = Client(BINANCE_API_KEY, BINANCE_API_SECRET, {"timeout": 60})
 
 
 trade_counter = 0
@@ -43,7 +40,7 @@ config = {
     "ATR_WINDOW": 14,  # Standard ATR for volatility check
     "BB_WINDOW": 20,  # Bollinger Bands window
     "SR_WINDOW": 10,  # Support/Resistance evaluation
-    "MIN_VOLUME": 1000000,  # Increase liquidity requirement
+    "MIN_VOLUME": 20000000,  # Increase liquidity requirement
     "EMA_SPANS": [7, 14],  # Short-term EMA crossover
     "RSI_BOUNDS": [50, 70],  # Keep within momentum zone
     "RSI_OVERBOUGHT_THRESHOLD": 75,  # Avoid buying top
@@ -64,10 +61,13 @@ config = {
     "VOLUME_SCORE_WEIGHT": 2,  # Volume spike must be present
     "VOLUME_SPIKE_THRESHOLD": 2,  # 2x average volume
     "ADX_BOUNDS": [20, 50],  # Avoid weak or overextended trends
-    "ATR_BOUNDS": [0.001, 0.05],  # Example: Allow ATR% between 0.1% and 5%
+    "ATR_BOUNDS": [0.008, 0.025],  # Example: Allow ATR% between 0.8% and 2.5% 
     "SL_BUFFER_MULTIPLIER": 1.1,  # Adaptive SL
     "TP_BUFFER_MULTIPLIER": 1.8,  # TP should be larger to increase RR
-    "VOLUME_THRESHOLD": 1.5  # 1.5x rolling avg volume needed
+    "VOLUME_THRESHOLD": 1.5,  # 1.5x rolling avg volume needed
+    "HULL_LENGTH": 55,
+    "SMA_FILTER_LENGTH": 130,
+    "TRAILING_STOP_PCT": 0.05
 }
 
 descriptions = {
