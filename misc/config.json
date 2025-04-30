@@ -1,0 +1,14 @@
+{
+    "MIN_VOLUME": 500000,
+    "EMA_SPANS": [9, 21],
+    "RSI_BOUNDS": [50, 70],
+    "HISTOGRAM_GROWTH_THRESHOLD": 0.0002,
+    "SCORE_THRESHOLD": 4,
+    "TIMEFRAME": "1m",
+    "CANDLES_LIMIT": 50,
+    "ADDITIONAL_TIMEFRAMES": ["5m", "15m"],
+    "MAX_LOSS_PER_TRADE": 0.02,
+    "EXCHANGE_FEES": 0.001,
+    "apiKey": "1OXfkc8fLPBtw2mqrt1HDbhiopoFQd6OSNVp7LEZkaaA1FG95P2bQyUfsPEkAdbp",
+    "secret": "mo6rnlXm0vK89wzRdj1NoIpbzF8U8TYhfLHRN7XEZYU9H3vBt7mkjwIUA4yAl78Q"
+}
