@@ -12,3 +12,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+# Python virtual-environment folders
+.venv/
+venv/
+env/

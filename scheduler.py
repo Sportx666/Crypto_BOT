@@ -104,7 +104,7 @@ def run_bot_logic():
                 gui.add_to_console("No pairs passed the Dynamic Trend Breakout strategy.\n")
                 gui.quit_button.config(state=tk.ACTIVE)
                 gui.close_button.config(state=tk.DISABLED)
-                return False
+                return True
 
         except Exception as e:
             logging.error(f"Error applying Dynamic Trend Breakout strategy: {e}")
