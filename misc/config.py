@@ -1,8 +1,12 @@
 import json
+from pathlib import Path
 from threading import Lock
 from binance.client import Client
 import logging
 import os
+from env_loader import load_env
+
+load_env() # Load environment variables from .env file
 
 
 indicator_cache_lock = Lock()
@@ -19,8 +23,6 @@ worker_script = os.path.join(script_dir, "trade", "order_worker.py")
 gui = None
 
 # LIVE
-import os
-
 BINANCE_API_KEY    = os.getenv("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
@@ -113,6 +115,9 @@ skip_reason_descriptions = {
     "EV": "The entry price did not meet validation criteria, such as being too close to resistance."
 }
 
+# --- make sure logs/ exists ---
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)  # Create logs directory if it doesn't exist
 
 logging.basicConfig(
     filename=f'{script_dir}\\logs\\trading_bot.log',  # Log file name
