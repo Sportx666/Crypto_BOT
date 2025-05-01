@@ -156,37 +156,33 @@ def place_trade(best_pair):
     
     try:
         
+        # Path to the worker script
         # Run the worker script
-        process = subprocess.Popen(
-            ["python", worker_script],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        order = client.ws_create_otoco_order(**params)
+        #process = subprocess.Popen(
+        #    ["python", worker_script],
+        #    stdin=subprocess.PIPE,
+        #    stdout=subprocess.PIPE,
+        #    stderr=subprocess.PIPE,
+        #    text=True
+        #)
 
         # Send parameters to the worker
-        output, error = process.communicate(input=json.dumps(params))        
+        #output, error = process.communicate(input=json.dumps(params))
         
-        if process.returncode == 0:
-            result = json.loads(output)
-            if result["status"] == "success":
-                data = result["data"]
-                gui.add_to_console("OTOCO order placed successfully.\n")
-                placed_order_ids = {}
-                # Update the table with the order reports
-                gui.update_trade_details_table(data['orderReports'])
-                gui.start_trade_graph(entry_price=entry_price, stop_loss=stop_loss,take_profit=take_profit,pair_name=pair)
-                return True
-            else:
-                gui.add_to_console(f"Error placing order: {result['message']}\n")
-                return False
-        else:
-            gui.add_to_console(f"Worker script error: {error}\n")
-            return False
+        #if process.returncode == 0:
+        #    result = json.loads(output)
+        #if result["status"] == "success":
+        gui.add_to_console("OTOCO order placed successfully.\n")
+        placed_order_ids = {}
+        # Update the table with the order reports
+        gui.update_trade_details_table(order['orderReports'])
+        gui.start_trade_graph(entry_price=entry_price, stop_loss=stop_loss,take_profit=take_profit,pair_name=pair)
+        return True                
 
     except Exception as e:
-        gui.add_to_console(f"Error running worker script: {e}\n")
+        logging.error(f"Error placing order: {e}")
+        gui.add_to_console(f"Error placing order: {e}\n")
         return False   
     
 # endregion

@@ -173,7 +173,7 @@ def get_latest_trade_from_log(filename="detailed_trade_logs.log"):
         with open(filename, "r") as file:
             lines = file.readlines()
             if not lines:
-                return None
+                return 0
             
             # Parse the latest logged trade
             latest_trade = lines[-1].strip().split(" | ")

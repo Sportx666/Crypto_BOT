@@ -1,8 +1,9 @@
 import sys
 import json
-from misc.config import client
+from misc.config import *
 
-def place_order(params):
+def place_order(params):    
+    
     try:
         order = client.ws_create_otoco_order(**params)
         return {"status": "success", "data": order}
