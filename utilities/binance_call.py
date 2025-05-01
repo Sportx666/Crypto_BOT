@@ -25,6 +25,7 @@ def filter_active_pairs():
             and ticker['symbol'].endswith('USDT')
             and float(ticker['quoteVolume']) >= config["MIN_VOLUME"]
             and ticker['symbol'] not in blacklist
+            and (float(ticker['askPrice']) / float(ticker['bidPrice']) - 1) <= config["MAX_SPREAD_PCT"]
         ]
 
         return active_pairs

@@ -63,13 +63,14 @@ config = {
     "VOLUME_SCORE_WEIGHT": 2,  # Volume spike must be present
     "VOLUME_SPIKE_THRESHOLD": 2,  # 2x average volume
     "ADX_BOUNDS": [20, 50],  # Avoid weak or overextended trends
-    "ATR_BOUNDS": [0.008, 0.025],  # Example: Allow ATR% between 0.8% and 2.5% 
+    "ATR_BOUNDS": [0.008, 0.025],  # Example: Allow ATR% between 0.8 % → 2.5 % (decimal form)
     "SL_BUFFER_MULTIPLIER": 1.1,  # Adaptive SL
     "TP_BUFFER_MULTIPLIER": 1.8,  # TP should be larger to increase RR
     "VOLUME_THRESHOLD": 1.5,  # 1.5x rolling avg volume needed
     "HULL_LENGTH": 55,
     "SMA_FILTER_LENGTH": 130,
-    "TRAILING_STOP_PCT": 0.05
+    "TRAILING_STOP_PCT": 0.05,
+    "MAX_SPREAD_PCT": 0.0006 # % max spread 
 }
 
 descriptions = {
