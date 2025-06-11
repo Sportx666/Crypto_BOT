@@ -1,10 +1,5 @@
 python-dotenv>=1.0
 python-binance>=1.0.19
-<<<<<<< HEAD
-pandas>=1.0.0
-numpy>=1.0.0
-matplotlib>=3.0.0
-=======
 matplotlib>=3.8
 numpy>=1.24.0
 pandas>=2.0.0
@@ -12,4 +7,3 @@ scikit-learn>=1.2.0
 scipy>=1.10.0
 requests>=2.28.0
 pytz>=2023.3
->>>>>>> 56cef7a9ca85684ae27db6a3f26a0ba22d3f9db0
