@@ -5,6 +5,7 @@ from utilities.binance_call import fetch_data
 def refine_best_pair(results, pair):
     best_pair = None
     best_score = -1
+    score = 0
 
     #for pair, score, df, analysis  in results: 
     #    if df is None or df.empty:
@@ -33,7 +34,7 @@ def refine_best_pair(results, pair):
     trend_result, trend_details = check_trend_confirmation(pair)
     if trend_result is None:
         logging.info(f"Skipping {pair}: No trend confirmation.")
-        #continue
+        return None
     elif trend_result:
         score *= 1.3
     else:
@@ -50,8 +51,8 @@ def refine_best_pair(results, pair):
         recent_low=min(df['low'].iloc[-5:]),
     )
 
-    #if suggestion is None:
-        #continue
+    if suggestion is None:
+        return None
 
     # Risk-to-Reward Validation
     rr_ratio = suggestion['rr_ratio']
@@ -65,8 +66,14 @@ def refine_best_pair(results, pair):
 
     if refinement_score > best_score:
         best_score = refinement_score
-        #best_pair = (pair, refinement_score, analysis, suggestion, breakout)
-        best_pair = (pair, refinement_score, suggestion, breakout)
+        analysis = {
+            "atr": atr,
+            "support": support,
+            "resistance": resistance,
+            "breakout_strength": breakout_strength,
+            "trend_details": trend_details,
+        }
+        best_pair = (pair, refinement_score, analysis, suggestion, breakout)
 
     return {
         "pair": best_pair[0],

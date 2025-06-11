@@ -71,10 +71,13 @@ def backtest_with_table(pair_table, data_path, interval="15T"):
             historical_data_indicators = calculate_indicators(historical_data_resampled)
 
             # Use refine_best_pair to calculate updated Entry, TP, SL
-            refined_params = refine_best_pair(historical_data_indicators, pair)
-            entry_price = refined_params["entry"]
-            stop_loss = refined_params["stop_loss"]
-            take_profit = refined_params["take_profit"]
+            refined = refine_best_pair(historical_data_indicators, pair)
+            if not refined:
+                print(f"Skipping {pair} at {timestamp}: no valid trade suggestion")
+                continue
+            entry_price = refined["trade_suggestion"]["entry"]
+            stop_loss = refined["trade_suggestion"]["stop_loss"]
+            take_profit = refined["trade_suggestion"]["take_profit"]
 
             # Simulate trade
             trade_result = {
