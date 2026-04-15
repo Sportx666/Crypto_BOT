@@ -1,6 +1,6 @@
 from misc.config import config, client, logging
-from core.indicator_new import calculate_indicators
-from utilities.binance_call_new import fetch_data
+from core.indicator import calculate_indicators
+from utilities.binance_call import fetch_data
 
 def refine_best_pair(results, pair):
     best_pair = None

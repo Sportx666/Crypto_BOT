@@ -1,8 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from misc.config import *
-from utilities.binance_call_new import fetch_data, filter_active_pairs
-from core.indicator_new import calculate_indicators
+from utilities.binance_call import fetch_data, filter_active_pairs
+from core.indicator import calculate_indicators
 
 
 def scan_pairs():

@@ -57,9 +57,9 @@ import pandas as pd
 from misc.config import (
     client, config, indicator_cache_lock, logging as bot_logger
 )
-from core.indicator_new import calculate_indicators
+from core.indicator import calculate_indicators
 from strategy.dynamic_trend_breakout import DynamicTrendBreakoutStrategy
-from strategy.scalping_breakout_new import ScalpingBreakoutStrategy
+from strategy.scalping_breakout import ScalpingBreakoutStrategy
 
 # ── constants ─────────────────────────────────────────────────────────────────
 CANDLES_PER_REQUEST = 500          # Binance hard limit per klines call

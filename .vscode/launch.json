@@ -8,7 +8,7 @@
             "name": "Run Trading Bot (main.py)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main_new.py",
+            "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "envFile": "${workspaceFolder}/.env"

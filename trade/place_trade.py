@@ -5,7 +5,7 @@ import subprocess
 from misc.config import *
 from binance.enums import *
 
-from core.shared_state_v2 import get_gui_instance
+from core.shared_state import get_gui_instance
 
 
 def place_trade(best_pair):

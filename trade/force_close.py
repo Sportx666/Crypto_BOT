@@ -1,10 +1,10 @@
 import threading
 import time
-from utilities.binance_call_new import close_market_trade
+from utilities.binance_call import close_market_trade
 from misc.config import *
 import tkinter as tk
 
-from core.shared_state_v2 import get_gui_instance
+from core.shared_state import get_gui_instance
 
 
 def close_orders():

@@ -21,8 +21,8 @@ Changes vs original:
 """
 
 import numpy as np
-from core.indicator_new import calculate_indicators
-from utilities.binance_call_new import fetch_data
+from core.indicator import calculate_indicators
+from utilities.binance_call import fetch_data
 
 
 class ScalpingBreakoutStrategy:

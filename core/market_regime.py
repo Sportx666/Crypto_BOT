@@ -245,7 +245,7 @@ def get_regime(force_refresh: bool = False) -> str:
         return _cache_regime
 
     try:
-        from utilities.binance_call_new import fetch_data
+        from utilities.binance_call import fetch_data
 
         btc_1h  = fetch_data("BTCUSDT", timeframe="1h",  limit=60)
         btc_15m = fetch_data("BTCUSDT", timeframe="15m", limit=60)

@@ -20,7 +20,7 @@ import tkinter as tk
 from trade.force_close import close_orders
 from core.scan_pair import scan_pairs
 from trade.place_trade import place_trade
-from core.shared_state_v2 import (
+from core.shared_state import (
     get_gui_instance, set_gui_instance,
     set_pair_cooldown, is_pair_in_cooldown, get_cooled_pairs,
 )
