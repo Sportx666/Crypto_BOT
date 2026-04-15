@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from misc.config import config, client, logging, blacklist
 import pandas as pd
 
-from core.shared_state_v2 import get_gui_instance
+from core.shared_state import get_gui_instance
 from utilities.pair_quality import filter_quality_pairs
 
 

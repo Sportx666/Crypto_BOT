@@ -21,7 +21,7 @@ Changes vs original:
 """
 
 import numpy as np
-from core.indicator_new import calculate_indicators
+from core.indicator import calculate_indicators
 from utilities.binance_call import fetch_data
 
 

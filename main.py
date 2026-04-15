@@ -1,9 +1,9 @@
 #region IMPORTS
 from binance.enums import *
 import customtkinter as ctk
-from UI_new import CryptoBotGUI
+from UI import CryptoBotGUI
 from misc.config import trade_counter
-from core.shared_state_v2 import get_gui_instance, set_gui_instance
+from core.shared_state import get_gui_instance, set_gui_instance
 #endregion
 
 
