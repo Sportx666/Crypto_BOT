@@ -52,10 +52,14 @@ def send_email_notification(subject, body):
         body (str): Body of the email.
         recipient (str): Recipient's email address.
     """
-    sender_email = "peppecarusi@gmail.com"
-    sender_password = "nlfq mdkn iihu vnxb"
+    sender_email = os.environ.get("GMAIL_SENDER", "")
+    sender_password = os.environ.get("GMAIL_APP_PASSWORD", "")
     smtp_server = "smtp.gmail.com"
     smtp_port = 587
+
+    if not sender_email or not sender_password:
+        logging.warning("Email notification skipped: GMAIL_SENDER / GMAIL_APP_PASSWORD not set in .env")
+        return
 
     msg = MIMEText(body)
     msg['Subject'] = subject
