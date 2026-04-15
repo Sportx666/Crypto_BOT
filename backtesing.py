@@ -1,8 +1,8 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from core.indicator import calculate_indicators  # Ensure this is available
-from final_pair import refine_best_pair  # Ensure this is available
+from core.indicator_new import calculate_indicators  # Ensure this is available
+from core.final_pair import refine_best_pair  # Ensure this is available
 
 # Paths to data and pair table
 data_path = r"C:\Users\gcarusi\OneDrive - CTI LOGISTICS LIMITED\Code\Project_new\New_bot\historical_data"

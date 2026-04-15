@@ -3,11 +3,11 @@ from email.mime.text import MIMEText
 import json
 import smtplib
 import time
-from utilities.binance_call import close_market_trade
+from utilities.binance_call_new import close_market_trade
 from misc.config import *
 import os
 
-from core.shared_state import get_gui_instance
+from core.shared_state_v2 import get_gui_instance
 
 
 def get_dynamic_histogram_threshold(atr):
