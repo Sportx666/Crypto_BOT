@@ -67,6 +67,16 @@ def calculate_support_resistance(df: pd.DataFrame, window: int = 20) -> tuple:
         resistance_val = float(df['high'].iloc[-window:].max())
         support_val    = float(df['low'].iloc[-window:].min())
 
+    # ── minimum S/R spread guard ──────────────────────────────────────────────
+    # If the spread is still < 0.2% of close (flat market, no meaningful levels)
+    # fall back to a wider window so SL and TP never collapse to the same price.
+    if current_close > 0:
+        spread_pct = (resistance_val - support_val) / current_close
+        if spread_pct < 0.002:
+            wider = min(window * 2, len(df))
+            resistance_val = float(df['high'].iloc[-wider:].max())
+            support_val    = float(df['low'].iloc[-wider:].min())
+
     # Return as Series aligned to df index
     df['support']    = support_val
     df['resistance'] = resistance_val

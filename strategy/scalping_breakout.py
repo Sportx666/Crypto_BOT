@@ -18,6 +18,16 @@ Changes vs original:
 
   NEW        analysis dict is enriched with momentum_confirmed and HGT fields
              passed through from the first-screen result.
+
+  PROFITABILITY IMPROVEMENTS:
+  • Regime-aware TP multiplier: BULL_STRONG uses 2.4× ATR (was hardcoded 1.8×),
+    giving larger targets when macro conditions support follow-through.
+  • Regime-aware RR ceiling: BULL_STRONG allows up to 3.5R (was 2.5R max),
+    so high-quality setups are no longer rejected for being "too profitable".
+  • HTF confirmation uses a fixed threshold (4.0) instead of comparing against
+    the variable 1m score — fixes over-rejection of valid signals on HTF.
+  • Regime config keys (TP_BUFFER_MULTIPLIER, RR_MAX_OVERRIDE) are read from
+    the live_config that scheduler already populates via apply_regime_to_config().
 """
 
 import numpy as np
@@ -82,7 +92,7 @@ class ScalpingBreakoutStrategy:
                 continue
 
             rr = suggestion['rr_ratio']
-            min_rr, max_rr = self.config.get("RR_THRESHOLD", (1.0, 2.5))
+            min_rr, max_rr = self.config.get("RR_THRESHOLD", (1.3, 3.0))
             if not (min_rr <= rr <= max_rr):
                 continue
 
@@ -171,10 +181,13 @@ class ScalpingBreakoutStrategy:
         max_loss_pct = 0.015   # never more than 1.5% below entry
         min_dist_pct = 0.002   # never less than 0.2% below entry (Binance min)
 
+        # Add a 0.3% buffer ABOVE support so a single wick through the level
+        # doesn't trigger the stop before the trade idea is invalidated.
+        support_buffered = support * 1.003
         stop_loss = max(
             atr_sl,
-            support,                          # never below nearest support
-            entry * (1 - max_loss_pct),       # hard max loss cap
+            support_buffered,                  # 0.3% above raw support
+            entry * (1 - max_loss_pct),        # hard max loss cap
         )
         # Ensure minimum distance
         stop_loss = min(stop_loss, entry * (1 - min_dist_pct))
@@ -185,11 +198,16 @@ class ScalpingBreakoutStrategy:
             return None
 
         # ── Take-Profit ───────────────────────────────────────────────────────
-        tp_mult  = sl_mult * 1.8   # reward should be ~1.8× the risk distance
+        # TP multiplier is regime-aware: BULL_STRONG gets a larger target.
+        # Default is 2.0× the SL distance (slightly more ambitious than old 1.8×).
+        # In BULL_STRONG regime apply_regime_to_config() sets TP_BUFFER_MULTIPLIER=2.4.
+        tp_cfg_mult = self.config.get("TP_BUFFER_MULTIPLIER", 2.0)
+        tp_mult  = sl_mult * tp_cfg_mult
         atr_tp   = entry + (tp_mult * atr)
         res_tp   = resistance * 0.9985   # just below resistance
 
-        # Use whichever is CLOSER (more likely to be hit for scalping)
+        # Use whichever is CLOSER (more likely to be hit for scalping).
+        # Minimum distance = 1.5× risk so we always have at least 1.5:1 RR.
         if res_tp > entry + 1.5 * risk:
             take_profit = min(atr_tp, res_tp)
         else:
@@ -208,7 +226,7 @@ class ScalpingBreakoutStrategy:
             return None
 
         rr_ratio = reward / risk_fee
-        min_rr, max_rr = self.config.get("RR_THRESHOLD", (1.0, 2.5))
+        min_rr, max_rr = self.config.get("RR_THRESHOLD", (1.3, 3.0))
 
         if not (min_rr <= rr_ratio <= max_rr):
             self.logger.info(
@@ -264,7 +282,12 @@ class ScalpingBreakoutStrategy:
             if not stoch_rsi_ok:
                 tf_score -= 1
 
-            if tf_score >= score:
+            # FIX: use a fixed HTF threshold (4.0) rather than the variable 1m
+            # score.  Comparing against the 1m score caused systematic over-
+            # rejection because HTF candles have fewer sub-bar spikes (lower
+            # volume ratio, wider MACD histograms relative to signal, etc.).
+            htf_confirm_threshold = self.config.get("HTF_CONFIRM_THRESHOLD", 4.0)
+            if tf_score >= htf_confirm_threshold:
                 trend_score += weights[idx]
 
             timeframe_results.append({
