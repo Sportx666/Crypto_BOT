@@ -22,9 +22,13 @@ def place_trade(best_pair):
     stop_loss = suggestion['stop_loss']
     take_profit = suggestion['take_profit']   
     atr = best_pair['analysis']['atr']
-    if not best_pair['breakout']:
+    # Cap TP just below resistance ONLY when a confirmed breakout has already
+    # cleared that level (price > resistance).  In consolidation / pre-breakout
+    # the TP calculated by the strategy already accounts for resistance distance
+    # and capping it here would only shrink the reward-to-risk ratio needlessly.
+    if best_pair['breakout']:
         resistance = best_pair['analysis']['resistance']
-        logging.info(f"Normal trade condition - Adj TP - Pair: {pair} - TP: {take_profit} - Resistance: {resistance}")
+        logging.info(f"Breakout trade - capping TP just below resistance: {pair} - TP: {take_profit} → {resistance * 0.999}")
         take_profit = min(take_profit, resistance * 0.999)
     
     

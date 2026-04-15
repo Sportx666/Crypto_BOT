@@ -26,7 +26,7 @@ from core.shared_state_v2 import (
 )
 from core.market_regime import (
     get_regime, apply_regime_to_config, regime_label,
-    BEAR_STRONG,
+    BEAR_STRONG, BEAR_WEAK,
 )
 from utilities.utility import (
     clear_cache, display_best_pair,
@@ -100,8 +100,9 @@ def run_bot_logic() -> bool:
     gui.add_to_console(f"\n{'─'*40}")
     gui.add_to_console(f"Market Regime: {label}")
 
-    if regime == BEAR_STRONG:
-        gui.add_to_console("⛔  BEAR_STRONG — skipping all trades this cycle.")
+    if regime in (BEAR_STRONG, BEAR_WEAK):
+        reason = "BEAR_STRONG — clear downtrend" if regime == BEAR_STRONG else "BEAR_WEAK — bull traps too frequent"
+        gui.add_to_console(f"⛔  {reason} — skipping all trades this cycle.")
         gui.quit_button.config(state=tk.ACTIVE)
         gui.close_button.config(state=tk.DISABLED)
         return True   # not an error, just no action

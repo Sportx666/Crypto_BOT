@@ -23,11 +23,11 @@ config = {
     # ── Indicator windows ────────────────────────────────────────────────────
     "ATR_WINDOW":            14,
     "BB_WINDOW":             20,
-    "SR_WINDOW":             20,    # ← was 10 (10-min S/R is meaningless)
+    "SR_WINDOW":             15,    # ← was 20; 15 min S/R is more responsive on 1m
     "CANDLES_LIMIT":         100,   # ← was 50 (needed for Ichimoku + warmup)
     "STOCH_WINDOW":          14,
     "HULL_LENGTH":           55,
-    "SMA_FILTER_LENGTH":     130,
+    "SMA_FILTER_LENGTH":     110,   # ← was 130; aligned to HULL_LENGTH*2 (55*2)
 
     # ── Pair selection ────────────────────────────────────────────────────────
     "MIN_VOLUME":            50_000_000,   # ← was 20M; blocks meme coins
@@ -45,30 +45,48 @@ config = {
     "PAIR_COOLDOWN_MINUTES": 30,           # NEW: 30-min cooldown after any trade
 
     # ── Signal scoring ────────────────────────────────────────────────────────
-    "EMA_SPANS":             [7, 14],
-    "EMA_SCORE_WEIGHT":      2.5,
+    "EMA_SPANS":             [9, 21],   # ← was [7,14]; 9/21 give cleaner signals
+                                        #   with fewer false crosses on 1m noise
+    "EMA_SCORE_WEIGHT":      1.5,    # ← was 2.5 (EMA lag reduced; freed weight to VWAP)
     "MACD_SCORE_WEIGHT":     2.0,
     "RSI_SCORE_WEIGHT":      1.0,
     "VOLUME_SCORE_WEIGHT":   2.0,
+    "VWAP_SCORE_WEIGHT":     1.5,    # ← was 0.5 (VWAP = key intraday institutional level)
+    "ICHIMOKU_SCORE_WEIGHT": 1.0,    # NEW: price above cloud = very strong bull bias
+    "ADX_SLOPE_SCORE_WEIGHT":0.5,    # NEW: rising ADX = trend gaining strength
+    "VOLUME_ACCEL_SCORE_WEIGHT": 0.5, # NEW: volume building = participation expanding
+    "RSI_SLOPE_SCORE_WEIGHT":0.3,    # NEW: RSI trending up = momentum growing
+    "CANDLEBODY_SCORE_WEIGHT":0.3,   # NEW: large bullish candle = conviction bar
 
-    "SCORE_THRESHOLD":       5.0,    # ← was 3.5 (need higher quality signals)
-    "REFINED_SCORE_THRESHOLD":6.0,   # ← was 4.5
+    "SCORE_THRESHOLD":       6.5,    # ← was 5.0; max possible ~11.6, so 6.5 = ~56%
+                                     #   of max — forces genuine conviction signals
+    "REFINED_SCORE_THRESHOLD":7.5,   # ← was 6.0; second-screen bar raised in step
 
     # ── Indicator bounds ─────────────────────────────────────────────────────
-    "RSI_BOUNDS":            [50, 70],
-    "RSI_OVERBOUGHT_THRESHOLD": 75,
-    "ADX_BOUNDS":            [25, 55],     # ← was [20, 50] (stronger trend)
+    "RSI_BOUNDS":            [45, 75],   # ← was [50,70]; 45-75 captures full
+                                         #   momentum build-up phase; overbought
+                                         #   still capped by OVERBOUGHT_THRESHOLD
+    "RSI_OVERBOUGHT_THRESHOLD": 78,      # ← was 75; 78 lets strong breakouts score
+    "ADX_BOUNDS":            [25, 65],   # ← was [25,55]; allow strongly trending
+                                         #   markets (crypto rallies often hit 60+)
     "ATR_BOUNDS":            [0.008, 0.025],  # ATR% bounds (atr/price)
     "VOLUME_SPIKE_THRESHOLD":2.2,           # ← was 2.0
     "VOLUME_THRESHOLD":      1.5,
 
     # ── Trade suggestion ─────────────────────────────────────────────────────
-    "RR_THRESHOLD":          [1.0, 2.5],
+    "RR_THRESHOLD":          [1.3, 3.0],   # ← was [1.0, 2.5]; reject marginal 1.0R trades;
+                                           #   allow high-quality 3.0R setups
     "ROOM_MULTIPLIER":       1.2,
     "ALLOW_PARTIAL_CONFIRMATION": True,
     "SL_BUFFER_MULTIPLIER":  1.1,
-    "TP_BUFFER_MULTIPLIER":  1.8,
+    "TP_BUFFER_MULTIPLIER":  2.0,          # ← was 1.8 (slightly more ambitious TP)
     "TRAILING_STOP_PCT":     0.05,
+
+    # ── Multi-timeframe confirmation ──────────────────────────────────────────
+    # Fixed score threshold that a higher timeframe (3m/5m) must reach to count
+    # as "confirmed".  Previously compared against the variable 1m score, which
+    # over-rejected valid signals because HTF candles look weaker in sub-bar metrics.
+    "HTF_CONFIRM_THRESHOLD": 4.0,
 
     # ── Market regime ─────────────────────────────────────────────────────────
     "ENABLE_REGIME_FILTER":  True,    # NEW: apply regime-based score multipliers

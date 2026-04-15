@@ -56,15 +56,19 @@ REGIME_CONFIG_OVERRIDES: dict[str, dict] = {
         "score_mult":          1.0,   # normal scoring
         "refined_score_mult":  1.0,
         "rr_min_mult":         1.0,
+        "rr_max_override":     3.5,   # allow high-quality 3.5R setups (was capped at 2.5)
+        "tp_mult_override":    2.4,   # larger TP targets when trend has follow-through
         "adx_min_add":         0,
         "volume_spike_mult":   1.0,
         "allow_partial":       True,
-        "description": "Strong bull market — trade normally",
+        "description": "Strong bull market — trade normally with larger targets",
     },
     BULL_WEAK: {
         "score_mult":          1.15,  # need 15% higher score
         "refined_score_mult":  1.15,
         "rr_min_mult":         1.0,
+        "rr_max_override":     3.0,   # standard ceiling
+        "tp_mult_override":    2.0,   # standard TP
         "adx_min_add":         5,     # ADX must be 5 points higher
         "volume_spike_mult":   1.1,
         "allow_partial":       True,
@@ -74,24 +78,32 @@ REGIME_CONFIG_OVERRIDES: dict[str, dict] = {
         "score_mult":          1.35,  # need 35% higher score
         "refined_score_mult":  1.35,
         "rr_min_mult":         1.2,   # need better R:R
+        "rr_max_override":     3.0,
+        "tp_mult_override":    2.0,
         "adx_min_add":         10,
         "volume_spike_mult":   1.3,
         "allow_partial":       False, # require full confirmation
         "description": "Sideways market — raise bar significantly",
     },
     BEAR_WEAK: {
-        "score_mult":          1.60,
-        "refined_score_mult":  1.60,
-        "rr_min_mult":         1.4,
-        "adx_min_add":         15,
-        "volume_spike_mult":   1.5,
+        # Blocked entirely — early downtrends produce too many bull traps.
+        # Raising multipliers to 999 prevents any trade from qualifying.
+        "score_mult":          999,
+        "refined_score_mult":  999,
+        "rr_min_mult":         1.0,
+        "rr_max_override":     3.0,
+        "tp_mult_override":    2.0,
+        "adx_min_add":         0,
+        "volume_spike_mult":   1.0,
         "allow_partial":       False,
-        "description": "Early downtrend — only very strong setups",
+        "description": "Early downtrend — NO TRADES (bull traps too frequent)",
     },
     BEAR_STRONG: {
         "score_mult":          999,   # effectively blocks all trades
         "refined_score_mult":  999,
         "rr_min_mult":         1.0,
+        "rr_max_override":     3.0,
+        "tp_mult_override":    2.0,
         "adx_min_add":         0,
         "volume_spike_mult":   1.0,
         "allow_partial":       False,
@@ -178,6 +190,18 @@ def _score_asset(df: pd.DataFrame) -> float:
         score += 2.0
     elif ll and not hh:
         score -= 2.0
+
+    # 6. Volume expansion (+1 / -1)
+    # Rising 5-bar average volume relative to 20-bar average signals growing
+    # participation, which supports trend continuation.
+    if 'volume' in df.columns and len(df) >= 20:
+        vol_recent = df['volume'].iloc[-5:].mean()
+        vol_base   = df['volume'].iloc[-20:].mean()
+        if vol_base > 0:
+            if vol_recent > vol_base * 1.2:
+                score += 1.0
+            elif vol_recent < vol_base * 0.8:
+                score -= 1.0
 
     return round(score, 2)
 
@@ -281,11 +305,17 @@ def apply_regime_to_config(base_config: dict, regime: str) -> dict:
     cfg["VOLUME_SPIKE_THRESHOLD"]   = cfg.get("VOLUME_SPIKE_THRESHOLD",   2.0) * vsm
     cfg["ALLOW_PARTIAL_CONFIRMATION"] = overrides["allow_partial"]
 
-    rr_min, rr_max = cfg.get("RR_THRESHOLD", [1.0, 2.5])
-    cfg["RR_THRESHOLD"] = [rr_min * rrm, rr_max]
+    rr_min, rr_max = cfg.get("RR_THRESHOLD", [1.3, 3.0])
+    rr_max_override = overrides.get("rr_max_override", rr_max)
+    cfg["RR_THRESHOLD"] = [rr_min * rrm, rr_max_override]
 
     adx_min, adx_max = cfg.get("ADX_BOUNDS", [20, 65])
     cfg["ADX_BOUNDS"] = [adx_min + adx_add, adx_max]
+
+    # Regime-aware TP multiplier: strategy reads TP_BUFFER_MULTIPLIER from config.
+    tp_override = overrides.get("tp_mult_override")
+    if tp_override is not None:
+        cfg["TP_BUFFER_MULTIPLIER"] = tp_override
 
     return cfg
 
