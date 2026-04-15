@@ -25,7 +25,7 @@ from indicators.macd              import calculate_macd
 from indicators.rsi               import calculate_rsi
 from indicators.stoch_rsi         import calculate_stoch_rsi
 from indicators.stochastic        import calculate_stochastic
-from indicators.support_resistance     import calculate_support_resistance
+from indicators.support_resistance import calculate_support_resistance
 from indicators.vwap              import calculate_vwap
 
 

@@ -1,9 +1,9 @@
 import sys
 print("PYTHONPATH:", sys.path)
 
-from config import *
-from final_pair import calculate_trade_suggestion
-from utils import clear_cache
+from misc.config import *
+from core.final_pair import calculate_trade_suggestion
+from utilities.utility import clear_cache
 from utilities.binance_call import fetch_recent_data
 from core.indicator import calculate_indicators
 

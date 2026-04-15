@@ -61,7 +61,7 @@ except ImportError:
 from misc.config import *
 from trade.force_close import close_orders
 from scheduler import scheduled_routine
-from core.shared_state_v2 import get_gui_instance
+from core.shared_state import get_gui_instance
 from utilities.utility import save_blacklist, save_trade_counter, update_trading_table
 
 
