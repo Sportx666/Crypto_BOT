@@ -1,146 +1,130 @@
+"""
+Binance API Utilities
+=====================
+Changes vs original:
+  • filter_active_pairs() now uses the pair quality filter from
+    utilities/pair_quality.py, which blocks meme tokens, non-ASCII
+    symbols, pump/dumps, and thin liquidity pairs.
+"""
+
 from datetime import datetime, timedelta
 from misc.config import config, client, logging, blacklist
 import pandas as pd
 
-from core.shared_state import get_gui_instance
-
+from core.shared_state_v2 import get_gui_instance
+from utilities.pair_quality import filter_quality_pairs
 
 
 def filter_active_pairs():
-    """Filter pairs by volume and trading activity."""
+    """
+    Return a list of high-quality USDT pairs that pass all quality gates:
+      - ASCII-only symbol
+      - Not blacklisted
+      - Minimum 24h volume (MIN_VOLUME)
+      - Minimum 24h trade count (MIN_TRADES_24H)
+      - No extreme 24h price change (MAX_24H_CHANGE_PCT)
+      - Spread within MAX_SPREAD_PCT
+    """
     global blacklist
 
     try:
-        tickers = client.get_ticker()
+        tickers       = client.get_ticker()
         exchange_info = client.get_exchange_info()
-        trading_pairs = {
-            symbol['symbol']: symbol['isSpotTradingAllowed']
-            for symbol in exchange_info['symbols'] if symbol['status'] == 'TRADING'
+
+        trading_symbols = {
+            s['symbol']
+            for s in exchange_info['symbols']
+            if s['status'] == 'TRADING' and s.get('isSpotTradingAllowed', False)
         }
 
-        active_pairs = [
-            ticker['symbol'] for ticker in tickers
-            if ticker['symbol'] in trading_pairs
-            and trading_pairs[ticker['symbol']]
-            and ticker['symbol'].endswith('USDT')
-            and float(ticker['quoteVolume']) >= config["MIN_VOLUME"]
-            and ticker['symbol'] not in blacklist
-            and (float(ticker['askPrice']) / float(ticker['bidPrice']) - 1) <= config["MAX_SPREAD_PCT"]
-        ]
+        # Apply full quality pipeline
+        active_pairs = filter_quality_pairs(tickers, trading_symbols, config)
 
+        logging.info(f"Active pairs after quality filter: {len(active_pairs)}")
         return active_pairs
+
     except Exception as e:
         logging.error(f"Error fetching tickers: {e}")
         return []
-    
-    
+
 
 def fetch_data(pair, timeframe=config["TIMEFRAME"], limit=config["CANDLES_LIMIT"]):
-    
-    """Fetch historical data for a given pair and timeframe."""
+    """Fetch historical OHLCV data for a given pair and timeframe."""
     try:
-        #logging.info(f"Fetching data for {pair} with timeframe {timeframe}.")
-        # Fetch klines data
         klines = client.get_klines(
             symbol=pair,
             interval=timeframe,
-            limit=limit
+            limit=limit,
         )
-        # Convert data to DataFrame
         df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 
-            'close_time', 'quote_asset_volume', 'number_of_trades', 
-            'taker_buy_base', 'taker_buy_quote', 'ignore'
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_asset_volume', 'number_of_trades',
+            'taker_buy_base', 'taker_buy_quote', 'ignore',
         ])
-
-        # Keep only relevant columns
         df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-        #logging.debug(f"Data fetched for {pair}. Total rows: {len(df)}")
+        df[['open', 'high', 'low', 'close', 'volume']] = \
+            df[['open', 'high', 'low', 'close', 'volume']].astype(float)
         return df
     except Exception as e:
         logging.error(f"Error fetching data for {pair}: {e}")
         return None
-    
 
 
-def fetch_recent_data(pair, start_time_str='2025-01-14T10:00:00', trade_length=3600, timeframe="1m", limit=30):
-    """
-    Fetch historical candlestick data from Binance for a given trading pair.
-    
-    Args:
-        pair (str): Trading pair (e.g., 'BTCUSDT').
-        start_time_str (str): Start time in ISO format (e.g., '2025-01-14T10:00:00').
-        trade_length (int): Length of the trade period in minutes.
-        interval (str): Binance interval (default '1m').
-
-    Returns:
-        pd.DataFrame: DataFrame with historical OHLC data.
-    """
+def fetch_recent_data(
+    pair,
+    start_time_str: str = '2025-01-14T10:00:00',
+    trade_length:   int  = 3600,
+    timeframe:      str  = "1m",
+    limit:          int  = 30,
+):
+    """Fetch historical data around a specific timestamp (used by backtester)."""
     try:
-        # Parse start_time
-        start_time = datetime.fromisoformat(start_time_str)
-        trade_length = int(trade_length)  # Ensure trade_length is an integer
-        
-        # Calculate the end time
+        start_time    = datetime.fromisoformat(start_time_str)
+        trade_length  = int(trade_length)
         start_time_ms = int(start_time.timestamp() * 1000)
-        end_time = start_time + timedelta(minutes=trade_length)
-        end_time_ms = int(end_time.timestamp() * 1000)
-        
-        # Fetch data using Binance API
+        end_time_ms   = int((start_time + timedelta(minutes=trade_length)).timestamp() * 1000)
+
         klines = client.get_klines(
             symbol=pair.strip(),
             interval=timeframe,
             startTime=start_time_ms,
-            endTime=end_time_ms
+            endTime=end_time_ms,
         )
-        
         if not klines:
-            raise ValueError(f"No data returned for {pair} from {start_time_str} to {end_time}.")
-        
-        # Create a DataFrame
+            raise ValueError(f"No data for {pair} from {start_time_str}")
+
         df = pd.DataFrame(klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_asset_volume', 'number_of_trades',
-            'taker_buy_base', 'taker_buy_quote', 'ignore'
+            'taker_buy_base', 'taker_buy_quote', 'ignore',
         ])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-        
-        # Return cleaned DataFrame
+        df[['open', 'high', 'low', 'close', 'volume']] = \
+            df[['open', 'high', 'low', 'close', 'volume']].astype(float)
         return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-    
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        logging.error(f"fetch_recent_data error: {e}")
         return None
 
 
-
-def close_market_trade (pair, quantity):
-    
+def close_market_trade(pair: str, quantity: float):
+    """Place an emergency market sell order to close a position."""
     gui = get_gui_instance()
-
-
-    # Place a new MARKET order with the same pair and quantity          
-    try:               
+    try:
         market_order = client.order_market_sell(symbol=pair, quantity=quantity)
-        # Add result to trading table
-        gui.update_trade_details_table(
-            [
-                {
-                    "symbol": market_order["symbol"],
-                    "transactTime": market_order["transactTime"],  
-                    "orderId": market_order["orderId"],
-                    "type": market_order["type"],
-                    "side": market_order["side"],
-                    "price": market_order["fills"][0]["price"] if market_order["fills"] else "0",  
-                    "origQty": market_order["origQty"],  
-                    "status": market_order["status"]
-                    }
-                ]
-            )            
-        gui.add_to_console(f"New MARKET order placed for {pair} with quantity {quantity}: {market_order}")     
-            
+        gui.update_trade_details_table([{
+            "symbol":        market_order["symbol"],
+            "transactTime":  market_order["transactTime"],
+            "orderId":       market_order["orderId"],
+            "type":          market_order["type"],
+            "side":          market_order["side"],
+            "price":         market_order["fills"][0]["price"] if market_order["fills"] else "0",
+            "origQty":       market_order["origQty"],
+            "status":        market_order["status"],
+        }])
+        gui.add_to_console(
+            f"MARKET SELL placed for {pair} qty={quantity}: {market_order['orderId']}"
+        )
     except Exception as e:
-        gui.add_to_console(f"Error processing market orders: {e}")      
+        gui.add_to_console(f"Error in close_market_trade: {e}")

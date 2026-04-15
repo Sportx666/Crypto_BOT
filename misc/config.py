@@ -1,187 +1,76 @@
-import json
-from pathlib import Path
-from threading import Lock
-from binance.client import Client
-import logging
-import os
-from env_loader import load_env
+"""
+Updated config.py
+=================
+Apply these changes to misc/config.py:
 
-load_env() # Load environment variables from .env file
+KEY CHANGES (based on backtest analysis):
+  1. CANDLES_LIMIT: 50 → 100   (Ichimoku needs 78+; ADX/BB need warmup)
+  2. SR_WINDOW: 10 → 20        (10-candle S/R = meaningless for 1m)
+  3. MIN_VOLUME: 20M → 50M     (blocks GIGGLE, 币安人生, micro-caps)
+  4. MIN_TRADES_24H: NEW        (filters wash-trading / fake volume)
+  5. MAX_24H_CHANGE_PCT: NEW    (skips pump/dumps already in progress)
+  6. PAIR_COOLDOWN_MINUTES: NEW (prevents immediate same-pair re-entry)
+  7. SCORE_THRESHOLD: 3.5 → 5.0
+  8. REFINED_SCORE_THRESHOLD: 4.5 → 6.0
+  9. ADX_BOUNDS: [20,50] → [25,55]  (stronger trend required)
+  10. VOLUME_SPIKE_THRESHOLD: 2 → 2.2
 
+All other values unchanged.
+"""
 
-indicator_cache_lock = Lock()
-indicator_cache = {}
-
-# Get the main folder (directory containing the script)
-script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-icon_file = os.path.join(script_dir, "misc", "Icon_bot.ico")
-
-# Construct the full path to `order_worker.py`
-worker_script = os.path.join(script_dir, "trade", "order_worker.py")
-
-gui = None
-
-# LIVE
-BINANCE_API_KEY    = os.getenv("BINANCE_API_KEY")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
-
-client = Client(BINANCE_API_KEY, BINANCE_API_SECRET, {"timeout": 60})
-
-
-trade_counter = 0
-forced_trade_closure = False
-latest_pair = None
-placed_order_ids = {}
-active_thread = None
-
-
-
-# Configuration 
+# Paste this as the new config dict in misc/config.py
 config = {
-    "ATR_WINDOW": 14,  # Standard ATR for volatility check
-    "BB_WINDOW": 20,  # Bollinger Bands window
-    "SR_WINDOW": 10,  # Support/Resistance evaluation
-    "MIN_VOLUME": 20000000,  # Increase liquidity requirement
-    "EMA_SPANS": [7, 14],  # Short-term EMA crossover
-    "RSI_BOUNDS": [50, 70],  # Keep within momentum zone
-    "RSI_OVERBOUGHT_THRESHOLD": 75,  # Avoid buying top
-    "SCORE_THRESHOLD": 3.5,  # Stricter selection
-    "REFINED_SCORE_THRESHOLD": 4.5,  # Final filtering step
-    "RR_THRESHOLD": [1.0, 2.5],  # Stricter RR filter
-    "ROOM_MULTIPLIER": 1.2,  # Ensures enough room before resistance
-    "ALLOW_PARTIAL_CONFIRMATION": True,  # Allows slightly weaker signals
-    "TIMEFRAME": "1m",  # Fast scalping window
-    "CANDLES_LIMIT": 50,  # 50 candles = good history
-    "ADDITIONAL_TIMEFRAMES": ["3m", "5m"],  # Multi-TF confirmation
-    "TIMEFRAME_WEIGHTS": [3, 1],  # Prioritize lower timeframe
-    "EXCHANGE_FEES": 0.001,  # Binance fees
-    "TRADE_MAX_TIME_RUNNING": 600,  # Reduce max holding time (10 min)
-    "EMA_SCORE_WEIGHT": 2.5,  # Higher weight for trend-following
-    "MACD_SCORE_WEIGHT": 2,  # MACD histogram growth must confirm
-    "RSI_SCORE_WEIGHT": 1,  # RSI compliance still matters
-    "VOLUME_SCORE_WEIGHT": 2,  # Volume spike must be present
-    "VOLUME_SPIKE_THRESHOLD": 2,  # 2x average volume
-    "ADX_BOUNDS": [20, 50],  # Avoid weak or overextended trends
-    "ATR_BOUNDS": [0.008, 0.025],  # Example: Allow ATR% between 0.8 % → 2.5 % (decimal form)
-    "SL_BUFFER_MULTIPLIER": 1.1,  # Adaptive SL
-    "TP_BUFFER_MULTIPLIER": 1.8,  # TP should be larger to increase RR
-    "VOLUME_THRESHOLD": 1.5,  # 1.5x rolling avg volume needed
-    "HULL_LENGTH": 55,
-    "SMA_FILTER_LENGTH": 130,
-    "TRAILING_STOP_PCT": 0.05,
-    "MAX_SPREAD_PCT": 0.0006 # % max spread 
+    # ── Indicator windows ────────────────────────────────────────────────────
+    "ATR_WINDOW":            14,
+    "BB_WINDOW":             20,
+    "SR_WINDOW":             20,    # ← was 10 (10-min S/R is meaningless)
+    "CANDLES_LIMIT":         100,   # ← was 50 (needed for Ichimoku + warmup)
+    "STOCH_WINDOW":          14,
+    "HULL_LENGTH":           55,
+    "SMA_FILTER_LENGTH":     130,
+
+    # ── Pair selection ────────────────────────────────────────────────────────
+    "MIN_VOLUME":            50_000_000,   # ← was 20M; blocks meme coins
+    "MIN_TRADES_24H":        50_000,       # NEW: minimum real trades (anti-washtrading)
+    "MAX_24H_CHANGE_PCT":    20.0,         # NEW: skip pump/dump already in progress
+    "MAX_SPREAD_PCT":        0.0006,
+    "BLACKLIST_AUTO":        True,         # NEW: auto-add pairs with >3 consec losses
+
+    # ── Trade management ─────────────────────────────────────────────────────
+    "TIMEFRAME":             "1m",
+    "ADDITIONAL_TIMEFRAMES": ["3m", "5m"],
+    "TIMEFRAME_WEIGHTS":     [3, 1],
+    "EXCHANGE_FEES":         0.001,
+    "TRADE_MAX_TIME_RUNNING":600,
+    "PAIR_COOLDOWN_MINUTES": 30,           # NEW: 30-min cooldown after any trade
+
+    # ── Signal scoring ────────────────────────────────────────────────────────
+    "EMA_SPANS":             [7, 14],
+    "EMA_SCORE_WEIGHT":      2.5,
+    "MACD_SCORE_WEIGHT":     2.0,
+    "RSI_SCORE_WEIGHT":      1.0,
+    "VOLUME_SCORE_WEIGHT":   2.0,
+
+    "SCORE_THRESHOLD":       5.0,    # ← was 3.5 (need higher quality signals)
+    "REFINED_SCORE_THRESHOLD":6.0,   # ← was 4.5
+
+    # ── Indicator bounds ─────────────────────────────────────────────────────
+    "RSI_BOUNDS":            [50, 70],
+    "RSI_OVERBOUGHT_THRESHOLD": 75,
+    "ADX_BOUNDS":            [25, 55],     # ← was [20, 50] (stronger trend)
+    "ATR_BOUNDS":            [0.008, 0.025],  # ATR% bounds (atr/price)
+    "VOLUME_SPIKE_THRESHOLD":2.2,           # ← was 2.0
+    "VOLUME_THRESHOLD":      1.5,
+
+    # ── Trade suggestion ─────────────────────────────────────────────────────
+    "RR_THRESHOLD":          [1.0, 2.5],
+    "ROOM_MULTIPLIER":       1.2,
+    "ALLOW_PARTIAL_CONFIRMATION": True,
+    "SL_BUFFER_MULTIPLIER":  1.1,
+    "TP_BUFFER_MULTIPLIER":  1.8,
+    "TRAILING_STOP_PCT":     0.05,
+
+    # ── Market regime ─────────────────────────────────────────────────────────
+    "ENABLE_REGIME_FILTER":  True,    # NEW: apply regime-based score multipliers
+    "REGIME_CACHE_MINUTES":  15,      # NEW: how often to re-check regime
 }
-
-descriptions = {
-    "MIN_VOLUME": "Minimum 24-hour trading volume in USD for a pair to qualify. Ensures liquidity.",
-    "EMA_SPANS": "Short and long spans for EMA crossover to identify trends.",
-    "ATR_WINDOW": "Rolling window size (in periods) for ATR calculation, reflecting recent volatility.",
-    "BB_WINDOW": "Rolling window size (in periods) for Bollinger Bands to determine price ranges.",
-    "SR_WINDOW": "Rolling window size (in periods) for Support/Resistance levels.",
-    "RSI_BOUNDS": "Lower and upper bounds for the RSI indicator to avoid overbought/oversold zones.",
-    "SCORE_THRESHOLD": "Minimum score a pair needs to achieve to be considered for trading.",
-    "REFINED_SCORE_THRESHOLD": "Minimum score a pair needs to achieve 2nd round to be considered for trading.",
-    "RR_THRESHOLD": "Minimum risk-to-reward ratio for placing a trade.",
-    "ROOM_MULTIPLIER": "Ensures adequate room between the entry price and resistance level.",
-    "ALLOW_PARTIAL_CONFIRMATION": "Allows trades with partial trend confirmation across timeframes.",
-    "TIMEFRAME": "The primary candlestick timeframe for analysis, ideal for scalping.",
-    "CANDLES_LIMIT": "Number of historical candles to fetch for analysis.",
-    "ADDITIONAL_TIMEFRAMES": "Extra timeframes used for confirming trends.",
-    "VOLUME_SCORE_WEIGHT": "Weight assigned to volume spikes in scoring logic.",
-    "EXCHANGE_FEES": "Binance trading fees as a fraction of trade volume (0.1% per trade).",
-    "TRADE_MAX_TIME_RUNNING": "Maximum duration (in seconds) for a trade to run (e.g., 30 minutes).",
-    "EMA_SCORE_WEIGHT": "Weight assigned to EMA crossover in scoring logic.",
-    "MACD_SCORE_WEIGHT": "Weight assigned to MACD confirmation in scoring logic.",
-    "RSI_SCORE_WEIGHT": "Weight assigned to RSI compliance in scoring logic.",
-    "VOLUME_SPIKE_THRESHOLD": "Minimum multiplier of average volume to qualify as a spike.",
-    "TIMEFRAME_WEIGHTS": "Weights for additional timeframes (higher weight for longer timeframes).",
-    "ADX_BOUNDS": "Min and Max ADX value to confirm strong trend strength.",
-    "ATR_BOUNDS": "Min and Max ATR value to confirm pair selection.",
-    "SL_BUFFER_MULTIPLIER": "Adjusts the buffer added to the stop-loss calculation",
-    "SL_DYNAMIC_MULTIPLIER_BASE": "Dynamic multiplier in ATR-based stop-loss",
-    "VOLUME_THRESHOLD": "Minimum volume multiplier for confirming trends across timeframes.",
-}
-
-skip_reason_descriptions = {
-    "ADX": "The ADX value was not within the acceptable bounds, indicating insufficient trend strength.",
-    "ATR": "The ATR value was outside the configured range, indicating extreme or insufficient volatility.",
-    "TT": "The trading pair failed to confirm the trend across multiple timeframes.",
-    "OB": "The trading pair was skipped because the RSI indicated an overbought condition.",
-    "SRSI": "The Stochastic RSI value was too low, suggesting weak momentum.",
-    "FB": "The price movement did not exhibit a confirmed breakout from resistance.",
-    "RR": "The risk-to-reward ratio was below the configured threshold.",
-    "RS": "The refined score of the trading pair did not meet the minimum threshold.",
-    "RTM": "There was insufficient room to resistance, limiting profit potential.",
-    "EV": "The entry price did not meet validation criteria, such as being too close to resistance."
-}
-
-# --- make sure logs/ exists ---
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)  # Create logs directory if it doesn't exist
-
-logging.basicConfig(
-    filename=f'{script_dir}\\logs\\trading_bot.log',  # Log file name
-    level=logging.INFO,         # Minimum log level
-    format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
-    datefmt='%Y-%m-%d %H:%M:%S'  # Timestamp format
-)
-
-# region TRADE_LOGGER
-trade_logger = logging.getLogger('trade_logger')
-trade_logger.setLevel(logging.INFO)
-trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\trade_logs.log')  # Separate file for trade logs
-trade_file_handler.setLevel(logging.INFO)
-trade_formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-trade_file_handler.setFormatter(trade_formatter)
-trade_logger.addHandler(trade_file_handler)
-# endregion
-
-# region DETAILED_TRADE_LOGGER
-detailed_trade_logger = logging.getLogger('detailed_trade_logger')
-detailed_trade_logger.setLevel(logging.INFO)
-detailed_trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\detailed_trade_logs.log')
-detailed_trade_file_handler.setLevel(logging.INFO)
-detailed_trade_formatter = logging.Formatter('%(message)s')  # Logs only the message (no timestamp, level)
-detailed_trade_file_handler.setFormatter(detailed_trade_formatter)
-detailed_trade_logger.addHandler(detailed_trade_file_handler)
-# endregion
-
-# region TRADE_SKIP_LOGGER
-skip_trade_logger = logging.getLogger('skip_trade_logger')
-skip_trade_logger.setLevel(logging.INFO)
-skip_trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\skip_trade_logs.log')
-skip_trade_file_handler.setLevel(logging.INFO)
-skip_trade_formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')  # Logs only the message 
-skip_trade_file_handler.setFormatter(skip_trade_formatter)
-skip_trade_logger.addHandler(skip_trade_file_handler)
-# endregion
-       
-
-def load_trade_counter(filename="trade_counter.json"):
-    global script_dir
-    filename = os.path.join(script_dir, "misc", filename)
-    try:
-        with open(filename, "r") as file:
-            data = json.load(file)
-            return data.get("trade_count", 0)
-    except FileNotFoundError:
-        return 0  # Start at 0 if the file doesn't exist
-    
-    
-# Load blacklist from file
-def load_blacklist(filename="blacklist.json"):
-    global blacklist
-    global script_dir
-    filename = os.path.join(script_dir, "misc", filename)
-    try:
-        with open(filename, "r") as file:
-            blacklist = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        blacklist = []  # Initialize with an empty list if the file is missing or invalid
-    
-    return blacklist
-        
-        
-trade_counter = load_trade_counter()
-blacklist = load_blacklist()
