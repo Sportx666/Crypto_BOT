@@ -4,6 +4,7 @@ from threading import Lock
 from binance.client import Client
 import logging
 import os
+from typing import Optional
 from env_loader import load_env
 
 load_env() # Load environment variables from .env file
@@ -26,7 +27,37 @@ gui = None
 BINANCE_API_KEY    = os.getenv("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
-client = Client(BINANCE_API_KEY, BINANCE_API_SECRET, {"timeout": 60})
+_client_lock = Lock()
+_client_instance: Optional[Client] = None
+
+
+def get_client() -> Client:
+    """
+    Lazily initialize Binance client so importing this module never requires
+    immediate network connectivity.
+    """
+    global _client_instance
+    if _client_instance is None:
+        with _client_lock:
+            if _client_instance is None:
+                _client_instance = Client(
+                    BINANCE_API_KEY,
+                    BINANCE_API_SECRET,
+                    {"timeout": 60},
+                    ping=False,
+                )
+    return _client_instance
+
+
+class _LazyBinanceClient:
+    """
+    Proxy that defers Binance Client construction until first attribute access.
+    """
+    def __getattr__(self, item):
+        return getattr(get_client(), item)
+
+
+client = _LazyBinanceClient()
 
 
 trade_counter = 0

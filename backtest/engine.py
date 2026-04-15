@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import time
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -67,6 +68,28 @@ MAX_FETCH_ATTEMPTS  = 3            # retries per API call
 STEP_DEFAULT        = 5            # bars to advance after a trade (faster scan)
 
 log = logging.getLogger("backtest")
+
+
+def timeframe_to_seconds(timeframe: str) -> int:
+    """
+    Convert Binance timeframe notation to seconds.
+    """
+    if not timeframe:
+        return 60
+
+    unit = timeframe[-1].lower()
+    try:
+        value = int(timeframe[:-1])
+    except (TypeError, ValueError):
+        return 60
+
+    unit_to_seconds = {
+        "m": 60,
+        "h": 3600,
+        "d": 86400,
+        "w": 604800,
+    }
+    return max(1, value * unit_to_seconds.get(unit, 60))
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════
@@ -306,10 +329,12 @@ class BacktestEngine:
             return []
 
         window         = self.config["CANDLES_LIMIT"]
-        max_bars       = int(self.config.get("TRADE_MAX_TIME_RUNNING", 600))
+        trade_timeout_seconds = int(self.config.get("TRADE_MAX_TIME_RUNNING", 600))
+        timeframe_seconds = timeframe_to_seconds(self.config.get("TIMEFRAME", "1m"))
+        max_bars       = max(1, math.ceil(trade_timeout_seconds / timeframe_seconds))
         fee_rate       = self.config.get("EXCHANGE_FEES", 0.001)
-        # 30-min cooldown expressed in bars (1 bar = 1 minute for default TF)
-        cooldown_bars  = int(self.config.get("PAIR_COOLDOWN_MINUTES", 30))
+        cooldown_seconds = int(self.config.get("PAIR_COOLDOWN_MINUTES", 30)) * 60
+        cooldown_bars  = max(1, math.ceil(cooldown_seconds / timeframe_seconds))
         trades:        List[Trade] = []
         i = window
         n = len(df_full)
