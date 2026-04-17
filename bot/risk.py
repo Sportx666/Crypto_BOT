@@ -165,6 +165,8 @@ class RiskManager:
         self._halt_reason: str = ""
         self._halt_auto_resume: bool = False
         self._equity: float = 0.0                    # updated from exchange
+        self._trades_today: int = 0                  # FIX #11: daily trade cap
+        self._trades_day_key: str = ""
 
     # ── Equity ────────────────────────────────────────────────────────────
 
@@ -331,6 +333,14 @@ class RiskManager:
                 f"Max positions ({self._cfg.max_concurrent_positions}) reached",
             )
 
+        # ── Daily trade cap ───────────────────────────────────────────────
+        self._refresh_trades_today()
+        if self._trades_today >= self._cfg.max_trades_per_day:
+            return RiskVerdict(
+                False,
+                f"Daily trade cap ({self._cfg.max_trades_per_day}) reached",
+            )
+
         # ── Directional exposure cap ──────────────────────────────────────
         verdict = self._check_exposure(direction)
         if not verdict.allowed:
@@ -354,6 +364,7 @@ class RiskManager:
         if size <= 0:
             return RiskVerdict(False, "Computed size is zero – r_distance too large?")
 
+        self._trades_today += 1
         return RiskVerdict(allowed=True, reason="OK", size=size, risk_usd=risk_usd)
 
     def _compute_size(self, r_distance: float) -> Tuple[float, float]:
@@ -405,6 +416,22 @@ class RiskManager:
                 f"Weekly loss {weekly:.2f} exceeds {self._cfg.weekly_loss_pct*100:.1f}%",
                 auto_resume=True,
             )
+
+    def _refresh_trades_today(self) -> None:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if today != self._trades_day_key:
+            self._trades_today = 0
+            self._trades_day_key = today
+
+    def record_partial_close(self, coin: str, price: float, close_size: float) -> Optional[float]:
+        """Record P&L for a partial close without removing the position."""
+        pos = self._positions.get(coin)
+        if pos is None:
+            return None
+        pnl = pos.direction * (price - pos.entry_price) * close_size
+        self._loss_tracker.record(pnl)
+        self._check_loss_limits()
+        return pnl
 
     def _maybe_resume_from_loss_reset(self) -> None:
         if not self._halted or not self._halt_auto_resume or self._equity <= 0:

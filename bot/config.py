@@ -43,9 +43,9 @@ class Config:
     hl_ws_url: str = ""
 
     # ── Timeframes ────────────────────────────────────────────────────────
-    exec_tf: str = "5m"       # signal evaluation timeframe
-    regime_tf: str = "15m"    # per-market regime timeframe
-    global_tf: str = "1h"     # global BTC filter timeframe
+    exec_tf: str = "5m"        # signal evaluation timeframe
+    regime_tf: str = "15m"     # per-market regime timeframe
+    global_tf: str = "1h"      # global BTC filter timeframe
     global_symbol: str = "BTC"
 
     # ── Universe & active set ─────────────────────────────────────────────
@@ -58,7 +58,6 @@ class Config:
     min_volume_24h_usd: float = field(
         default_factory=lambda: _float("MIN_VOLUME_24H_USD", 5_000_000.0)
     )
-    # Extra symbols always subscribed (global filter + held positions added dynamically)
     always_subscribed: List[str] = field(default_factory=lambda: ["BTC"])
 
     # ── Positions ────────────────────────────────────────────────────────
@@ -98,9 +97,14 @@ class Config:
         default_factory=lambda: _float("MAX_SHORT_NOTIONAL_PCT", 0.15)
     )
 
+    # ── Daily trade cap ───────────────────────────────────────────────────
+    max_trades_per_day: int = field(
+        default_factory=lambda: _int("MAX_TRADES_PER_DAY", 8)
+    )
+
     # ── Regime thresholds (15m) ───────────────────────────────────────────
     adx_trend_threshold: float = field(
-        default_factory=lambda: _float("ADX_TREND_THRESHOLD", 25.0)
+        default_factory=lambda: _float("ADX_TREND_THRESHOLD", 27.0)  # was 25
     )
     adx_strong_threshold: float = field(
         default_factory=lambda: _float("ADX_STRONG_THRESHOLD", 40.0)
@@ -111,15 +115,22 @@ class Config:
     atr_pct_max: float = field(
         default_factory=lambda: _float("ATR_PCT_MAX", 0.05)    # 5%
     )
+    # ADX must be rising (current vs N bars ago) to confirm trend is building
+    adx_slope_lookback: int = field(
+        default_factory=lambda: _int("ADX_SLOPE_LOOKBACK", 4)
+    )
 
     # ── TREND module (5m) ────────────────────────────────────────────────
     ema_fast: int = field(default_factory=lambda: _int("EMA_FAST", 9))
     ema_slow: int = field(default_factory=lambda: _int("EMA_SLOW", 21))
+    ema_mid: int = field(default_factory=lambda: _int("EMA_MID", 50))    # triple stack
+
+    # FIX #2: widen SL to reduce noise stops (was 1.5)
     trend_atr_sl_mult: float = field(
-        default_factory=lambda: _float("TREND_ATR_SL_MULT", 1.5)
+        default_factory=lambda: _float("TREND_ATR_SL_MULT", 2.0)
     )
     trend_partial_tp_r: float = field(
-        default_factory=lambda: _float("TREND_PARTIAL_TP_R", 1.0)   # 1R partial
+        default_factory=lambda: _float("TREND_PARTIAL_TP_R", 1.5)  # partial at 1.5R
     )
     trend_partial_close_pct: float = field(
         default_factory=lambda: _float("TREND_PARTIAL_CLOSE_PCT", 0.5)
@@ -127,8 +138,62 @@ class Config:
     trend_trail_atr_mult: float = field(
         default_factory=lambda: _float("TREND_TRAIL_ATR_MULT", 2.0)
     )
+    # FIX #5: raise ADX minimum (was 22)
     trend_min_adx: float = field(
-        default_factory=lambda: _float("TREND_MIN_ADX", 22.0)
+        default_factory=lambda: _float("TREND_MIN_ADX", 27.0)
+    )
+
+    # FIX #3: minimum R:R gate — without this you can't have positive expectancy
+    min_rr_trend: float = field(
+        default_factory=lambda: _float("MIN_RR_TREND", 2.0)
+    )
+
+    # FIX #4: swing lookback (was hardcoded 10 = 50 min noise)
+    swing_lookback_bars: int = field(
+        default_factory=lambda: _int("SWING_LOOKBACK_BARS", 20)
+    )
+
+    # FIX #8: require N consecutive closes above breakout level
+    breakout_confirm_bars: int = field(
+        default_factory=lambda: _int("BREAKOUT_CONFIRM_BARS", 1)
+    )
+
+    # FIX #6: volume must be > mult × rolling average on breakout candle
+    volume_spike_min_mult: float = field(
+        default_factory=lambda: _float("VOLUME_SPIKE_MIN_MULT", 1.4)
+    )
+    volume_avg_window: int = field(
+        default_factory=lambda: _int("VOLUME_AVG_WINDOW", 20)
+    )
+
+    # FIX #9: EMA spread gate (fast-slow gap must be ≥ X% of price)
+    ema_min_spread_pct: float = field(
+        default_factory=lambda: _float("EMA_MIN_SPREAD_PCT", 0.002)  # 0.2%
+    )
+
+    # FIX #7: move SL to break-even + small buffer after partial TP
+    move_sl_to_be_after_partial: bool = field(
+        default_factory=lambda: _bool("MOVE_SL_TO_BE_AFTER_PARTIAL", True)
+    )
+    be_buffer_atr_mult: float = field(
+        default_factory=lambda: _float("BE_BUFFER_ATR_MULT", 0.15)
+    )
+
+    # FIX #10: time-of-day filter (UTC hours)
+    trade_start_hour_utc: int = field(
+        default_factory=lambda: _int("TRADE_START_HOUR_UTC", 6)   # skip low-liq Asia
+    )
+    trade_end_hour_utc: int = field(
+        default_factory=lambda: _int("TRADE_END_HOUR_UTC", 22)
+    )
+
+    # FIX #12: stale-trade timeout → close at break-even
+    trade_max_duration_bars: int = field(
+        default_factory=lambda: _int("TRADE_MAX_DURATION_BARS", 12)  # 12×5m = 60 min
+    )
+    # If unrealised P&L < this fraction of risk_usd, exit (avoid slow bleed)
+    trade_exit_fraction_of_risk: float = field(
+        default_factory=lambda: _float("TRADE_EXIT_FRACTION_OF_RISK", -0.3)
     )
 
     # ── RANGE module (5m) ────────────────────────────────────────────────
@@ -136,18 +201,21 @@ class Config:
         default_factory=lambda: _float("RANGE_VWAP_BAND_ATR_MULT", 1.5)
     )
     range_atr_sl_mult: float = field(
-        default_factory=lambda: _float("RANGE_ATR_SL_MULT", 1.0)
+        default_factory=lambda: _float("RANGE_ATR_SL_MULT", 1.2)  # slightly wider
     )
     range_tp_r: float = field(
         default_factory=lambda: _float("RANGE_TP_R", 1.5)
     )
     range_max_adx: float = field(
-        default_factory=lambda: _float("RANGE_MAX_ADX", 28.0)  # don't range-trade strong trends
+        default_factory=lambda: _float("RANGE_MAX_ADX", 22.0)  # tighter: ADX<22 = real range
+    )
+    min_rr_range: float = field(
+        default_factory=lambda: _float("MIN_RR_RANGE", 1.5)
     )
 
     # ── Candle history on startup ─────────────────────────────────────────
     candle_history_bars: int = field(
-        default_factory=lambda: _int("CANDLE_HISTORY_BARS", 200)
+        default_factory=lambda: _int("CANDLE_HISTORY_BARS", 300)
     )
 
     # ── Logging / persistence ─────────────────────────────────────────────
@@ -173,10 +241,8 @@ class Config:
                 self.hl_api_url = "https://api.hyperliquid.xyz"
                 self.hl_ws_url = "wss://api.hyperliquid.xyz/ws"
 
-        # Clamp risk
         self.risk_pct = min(self.risk_pct, self.max_risk_pct)
 
-    # ── Convenience ───────────────────────────────────────────────────────
     def summary(self) -> str:
         mode = "DRY-RUN" if self.dry_run else "LIVE"
         net = "TESTNET" if self.testnet else "MAINNET"
@@ -184,5 +250,5 @@ class Config:
             f"[Config] {mode} | {net} | risk={self.risk_pct*100:.2f}% | "
             f"max_pos={self.max_concurrent_positions} | "
             f"daily_loss_cap={self.daily_loss_pct*100:.1f}% | "
-            f"weekly_loss_cap={self.weekly_loss_pct*100:.1f}%"
+            f"min_rr_trend={self.min_rr_trend} | adx_min={self.trend_min_adx}"
         )

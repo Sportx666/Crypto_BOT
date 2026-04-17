@@ -125,9 +125,10 @@ class ExecutionEngine:
 
     async def monitor_positions(self, mid_prices: dict) -> None:
         """
-        Called every 5m candle close (or more frequently from price updates).
-        Checks SL, trailing stop, partial TP for all open positions.
+        Called every 5m candle close.
+        Checks partial TP, break-even SL, trailing stop, hard SL, stale timeout.
         """
+        import time as _time
         for pos in list(self._risk.all_positions()):
             coin = pos.coin
             price = mid_prices.get(coin)
@@ -138,11 +139,19 @@ class ExecutionEngine:
             # Update trailing stop high/low
             self._risk.update_position_trail(coin, price)
 
-            # ── Partial TP (trend only) ───────────────────────────────────
-            if (
-                not pos.partial_taken
-                and isinstance(pos.tp_partial, float)
-            ):
+            # ── FIX #12: stale-trade timeout ─────────────────────────────
+            # If trade has been open > max_duration_bars × exec_tf minutes
+            # AND unrealised P&L is negative → exit to avoid slow bleed
+            age_bars = (_time.time() - pos.opened_at) / 300   # 5m bars
+            if age_bars >= self._cfg.trade_max_duration_bars:
+                upnl = pos.unrealised_pnl(price)
+                risk_usd = pos.r_distance * pos.size if pos.r_distance else 1.0
+                if upnl < risk_usd * self._cfg.trade_exit_fraction_of_risk:
+                    await self._close_full(pos, price, reason="timeout_exit")
+                    continue
+
+            # ── Partial TP ────────────────────────────────────────────────
+            if not pos.partial_taken and pos.tp_partial:
                 tp_hit = (
                     pos.direction == 1 and price >= pos.tp_partial
                 ) or (
@@ -150,8 +159,18 @@ class ExecutionEngine:
                 )
                 if tp_hit:
                     await self._close_partial(pos, price)
+                    # FIX #7: move SL to break-even after partial
+                    if self._cfg.move_sl_to_be_after_partial:
+                        be_sl = pos.entry_price + pos.direction * pos.atr * self._cfg.be_buffer_atr_mult
+                        # Only move SL if it improves (moves in our favour)
+                        if pos.direction == 1 and be_sl > pos.sl:
+                            pos.sl = be_sl
+                            log.info("%s SL moved to break-even: %.4f", coin, be_sl)
+                        elif pos.direction == -1 and be_sl < pos.sl:
+                            pos.sl = be_sl
+                            log.info("%s SL moved to break-even: %.4f", coin, be_sl)
 
-            # ── Trailing stop (after partial) ─────────────────────────────
+            # ── Trailing stop (after partial taken) ───────────────────────
             if pos.partial_taken:
                 trail_sl = pos.current_sl()
                 trail_hit = (
