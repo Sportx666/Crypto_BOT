@@ -163,6 +163,7 @@ class RiskManager:
         self._loss_tracker = LossTracker()
         self._halted: bool = False
         self._halt_reason: str = ""
+        self._halt_auto_resume: bool = False
         self._equity: float = 0.0                    # updated from exchange
 
     # ── Equity ────────────────────────────────────────────────────────────
@@ -178,16 +179,19 @@ class RiskManager:
 
     @property
     def is_halted(self) -> bool:
+        self._maybe_resume_from_loss_reset()
         return self._halted
 
-    def halt(self, reason: str) -> None:
+    def halt(self, reason: str, auto_resume: bool = False) -> None:
         self._halted = True
         self._halt_reason = reason
+        self._halt_auto_resume = auto_resume
         log.critical("TRADING HALTED: %s", reason)
 
     def resume(self) -> None:
         self._halted = False
         self._halt_reason = ""
+        self._halt_auto_resume = False
         log.warning("Trading resumed.")
 
     # ── Position tracking ─────────────────────────────────────────────────
@@ -253,6 +257,21 @@ class RiskManager:
         if pos:
             pos.partial_taken = True
 
+    def record_partial_close(self, coin: str, exit_price: float, close_size: float) -> Optional[float]:
+        """
+        Record realised PnL for a partial close without removing the position.
+        Returns realised PnL or None if the position/size is invalid.
+        """
+        pos = self._positions.get(coin)
+        if pos is None or close_size <= 0:
+            return None
+        if close_size > pos.size:
+            close_size = pos.size
+        pnl = pos.direction * (exit_price - pos.entry_price) * close_size
+        self._loss_tracker.record(pnl)
+        self._check_loss_limits()
+        return pnl
+
     # ── Cooldowns ────────────────────────────────────────────────────────
 
     def set_cooldown(self, coin: str, minutes: Optional[int] = None) -> None:
@@ -286,6 +305,8 @@ class RiskManager:
 
         r_distance: |entry - stop_loss| in price terms.
         """
+        self._maybe_resume_from_loss_reset()
+
         # ── Global halt ──────────────────────────────────────────────────
         if self._halted:
             return RiskVerdict(False, f"HALTED: {self._halt_reason}")
@@ -322,10 +343,10 @@ class RiskManager:
         weekly_limit = -self._equity * self._cfg.weekly_loss_pct
 
         if daily_loss <= daily_limit:
-            self.halt(f"Daily loss limit hit ({daily_loss:.2f} USD)")
+            self.halt(f"Daily loss limit hit ({daily_loss:.2f} USD)", auto_resume=True)
             return RiskVerdict(False, self._halt_reason)
         if weekly_loss <= weekly_limit:
-            self.halt(f"Weekly loss limit hit ({weekly_loss:.2f} USD)")
+            self.halt(f"Weekly loss limit hit ({weekly_loss:.2f} USD)", auto_resume=True)
             return RiskVerdict(False, self._halt_reason)
 
         # ── Position sizing ───────────────────────────────────────────────
@@ -375,9 +396,30 @@ class RiskManager:
         daily = self._loss_tracker.daily_pnl
         weekly = self._loss_tracker.weekly_pnl
         if daily <= -self._equity * self._cfg.daily_loss_pct:
-            self.halt(f"Daily loss {daily:.2f} exceeds {self._cfg.daily_loss_pct*100:.1f}%")
+            self.halt(
+                f"Daily loss {daily:.2f} exceeds {self._cfg.daily_loss_pct*100:.1f}%",
+                auto_resume=True,
+            )
         elif weekly <= -self._equity * self._cfg.weekly_loss_pct:
-            self.halt(f"Weekly loss {weekly:.2f} exceeds {self._cfg.weekly_loss_pct*100:.1f}%")
+            self.halt(
+                f"Weekly loss {weekly:.2f} exceeds {self._cfg.weekly_loss_pct*100:.1f}%",
+                auto_resume=True,
+            )
+
+    def _maybe_resume_from_loss_reset(self) -> None:
+        if not self._halted or not self._halt_auto_resume or self._equity <= 0:
+            return
+        daily = self._loss_tracker.daily_pnl
+        weekly = self._loss_tracker.weekly_pnl
+        daily_limit = -self._equity * self._cfg.daily_loss_pct
+        weekly_limit = -self._equity * self._cfg.weekly_loss_pct
+        if daily > daily_limit and weekly > weekly_limit:
+            log.info(
+                "Auto-resuming after reset window (daily=%.2f weekly=%.2f)",
+                daily,
+                weekly,
+            )
+            self.resume()
 
     # ── State snapshot for persistence ───────────────────────────────────
 
@@ -385,6 +427,7 @@ class RiskManager:
         return {
             "halted": self._halted,
             "halt_reason": self._halt_reason,
+            "halt_auto_resume": self._halt_auto_resume,
             "loss_tracker": self._loss_tracker.to_dict(),
             "cooldowns": self._cooldowns,
             "positions": {
@@ -411,6 +454,7 @@ class RiskManager:
     def from_dict(self, d: dict) -> None:
         self._halted = d.get("halted", False)
         self._halt_reason = d.get("halt_reason", "")
+        self._halt_auto_resume = d.get("halt_auto_resume", False)
         if "loss_tracker" in d:
             self._loss_tracker.from_dict(d["loss_tracker"])
         self._cooldowns = {k: float(v) for k, v in d.get("cooldowns", {}).items()}

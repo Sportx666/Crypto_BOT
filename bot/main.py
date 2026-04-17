@@ -271,9 +271,9 @@ class CryptoBot:
             await asyncio.sleep(10)  # poll every 10s
 
     async def _do_universe_scan(self) -> None:
+        self._universe.update_held_positions(self._risk.held_coins())
         to_sub, to_unsub = await self._universe.scan()
         self._active_set = set(self._universe.current_active())
-        self._universe.update_held_positions(self._risk.held_coins())
 
         for coin in to_sub:
             for tf in self.TIMEFRAMES:

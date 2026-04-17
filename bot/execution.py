@@ -207,10 +207,10 @@ class ExecutionEngine:
                 return
 
         # Update position size and mark partial taken
+        partial_pnl = self._risk.record_partial_close(pos.coin, price, close_size)
         pos.size -= close_size
         self._risk.mark_partial_taken(pos.coin)
-        partial_pnl = pos.direction * (price - pos.entry_price) * close_size
-        self._journal.log_partial(pos, price, close_size, partial_pnl)
+        self._journal.log_partial(pos, price, close_size, partial_pnl or 0.0)
 
     async def _close_full(self, pos: Position, price: float, reason: str) -> None:
         log.info(
