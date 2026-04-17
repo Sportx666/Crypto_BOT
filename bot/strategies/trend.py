@@ -103,14 +103,12 @@ class TrendStrategy:
         stoch_k = vals["stoch_k"]
         stoch_d = vals["stoch_d"]
 
-        # ── Gate: ADX ────────────────────────────────────────────────────
+        # ── Gate: ADX (minimum strength) ─────────────────────────────────
         if adx_val < self._cfg.trend_min_adx:
             return None
-
-        # FIX #5: ADX must be RISING (trend still building, not exhausted)
-        adx_series = indicators["adx"]
-        if not _adx_is_rising(adx_series, lookback=self._cfg.adx_slope_lookback):
-            return None
+        # NOTE: ADX slope check is intentionally on the REGIME (15m) level only.
+        # Checking slope again on 5m is too strict — 5m ADX oscillates even
+        # in strong trends. The regime engine ensures we're in a building trend.
 
         # ── FIX #9: EMA spread gate ────────────────────────────────────
         ema_spread_pct = abs(ema_f - ema_s) / close

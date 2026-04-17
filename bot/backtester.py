@@ -114,7 +114,7 @@ class BacktestResult:
             f"Avg win         : {avg_win:+.2f}  |  Avg loss: {avg_loss:+.2f}\n"
             f"Profit factor   : {profit_factor:.2f}\n"
             f"Max drawdown    : {max_dd:.2f}%\n"
-            f"Equity          : {self.starting_equity:.0f} → {self.ending_equity:.0f}\n"
+            f"Equity          : {self.starting_equity:.0f} -> {self.ending_equity:.0f}\n"
             f"Exit reasons    : {by_reason}\n"
             f"Patterns        : {by_pattern}\n"
             f"{'='*60}\n"
@@ -142,15 +142,34 @@ class Backtester:
         # Build bot config with optional overrides
         cfg = Config()
         cfg.dry_run = True
-        cfg.testnet = False   # use mainnet data for backtesting
+        # Always use mainnet for historical data regardless of .env TESTNET flag
+        cfg.hl_api_url = "https://api.hyperliquid.xyz"
+        cfg.hl_ws_url = "wss://api.hyperliquid.xyz/ws"
+        # ── Backtest-mode overrides (wall-clock guards that break historical replay) ──
+        # 1. Time-of-day filter uses datetime.now() – runs outside 06-22 UTC window
+        #    when backtester executes → would block every bar.
+        cfg.trade_start_hour_utc = 0
+        cfg.trade_end_hour_utc = 24      # 0 <= h < 24 -> always True
+        # 2. Per-coin cooldown uses time.time() + 60*60 – one real-time stop-loss
+        #    blocks the coin for the entire 2-minute backtester run (=30 sim days).
+        cfg.cooldown_after_stop_min = 0  # instant expiry in backtest
+        # 3. Daily trade cap uses datetime.now() date – never changes during a
+        #    single backtester run, so cap hits at 8 and blocks all later signals.
+        cfg.max_trades_per_day = 9999
         for k, v in bt_cfg.config_overrides.items():
             if hasattr(cfg, k):
                 setattr(cfg, k, v)
         self._cfg = cfg
 
         self._rest = HLRestClient(cfg.hl_api_url)
-        self._cache = CandleCache(max_bars=1000)
-        self._regime = RegimeEngine(cfg, self._cache)
+
+        # TWO caches:
+        #   _full_cache  – full history loaded once, NEVER modified (source for _slice_at)
+        #   _replay_cache – gets sliced data seeded per bar, used by RegimeEngine
+        self._full_cache = CandleCache(max_bars=10_000)
+        self._replay_cache = CandleCache(max_bars=200)
+        # RegimeEngine reads from _replay_cache (slice-accurate at each bar)
+        self._regime = RegimeEngine(cfg, self._replay_cache)
         self._trend_strat = TrendStrategy(cfg)
         self._range_strat = RangeStrategy(cfg)
 
@@ -164,15 +183,27 @@ class Backtester:
         self._equity_curve: List[float] = [bt_cfg.equity]
         self._trades: List[TradeRecord] = []
         self._open_sims: Dict[str, _SimPos] = {}   # coin → sim position
+        # Pipeline stage counters (logged at end of run for diagnostics)
+        self._probe: Dict[str, int] = {
+            "bars": 0, "df_ok": 0, "tradeable": 0, "signal": 0, "risk_ok": 0,
+        }
+
+    # Extra days fetched before the replay window to warm up indicators:
+    #   1h BTC needs 55 bars  → 55 h ≈ 2.3 days
+    #   15m regime needs 35+  → 35×15 m ≈ 9 h
+    #   5m ADX/EMA need ~30   → 30×5 m ≈ 2.5 h
+    # Use 4 extra days (safe margin) and skip that many 5m bars as warmup.
+    WARMUP_EXTRA_DAYS = 4
 
     async def run(self) -> BacktestResult:
         log.info("Backtest: coins=%s days=%d equity=%.0f",
                  self._bt.coins, self._bt.days, self._bt.equity)
 
-        # Fetch history
-        n_5m_bars = self._bt.days * 24 * 12
-        n_15m_bars = self._bt.days * 24 * 4
-        n_1h_bars = self._bt.days * 24
+        # Fetch (days + extra) of history so indicators are warm from bar 0
+        extra = self.WARMUP_EXTRA_DAYS
+        n_5m_bars  = (self._bt.days + extra) * 24 * 12
+        n_15m_bars = (self._bt.days + extra) * 24 * 4
+        n_1h_bars  = (self._bt.days + extra) * 24
 
         all_coins = self._bt.coins + [self._cfg.global_symbol]
         for coin in all_coins:
@@ -180,25 +211,29 @@ class Backtester:
                           (self.GLOBAL_TF, n_1h_bars)]:
                 try:
                     bars = await self._rest.get_candles_latest(coin, tf, n)
-                    self._cache.seed(coin, tf, bars)
+                    # Load into full_cache only (replay_cache populated per-bar)
+                    self._full_cache.seed(coin, tf, bars)
                     log.info("  %s %s: %d bars", coin, tf, len(bars))
                 except Exception as exc:
                     log.error("  %s %s fetch failed: %s", coin, tf, exc)
 
-        # Find common 5m timestamps across all non-BTC coins
+        # Find 5m timestamps from the reference coin
         ref_coin = self._bt.coins[0] if self._bt.coins else None
         if ref_coin is None:
             return BacktestResult([], self._equity, self._equity, self._equity_curve)
 
-        df_ref = self._cache.get(ref_coin, self.EXEC_TF)
+        df_ref = self._full_cache.get(ref_coin, self.EXEC_TF)
         if df_ref is None or df_ref.empty:
             log.error("No 5m data for %s", ref_coin)
             return BacktestResult([], self._equity, self._equity, self._equity_curve)
 
         timestamps = df_ref["ts"].tolist()
-        warmup = 60   # skip first 60 bars while indicators warm up
+        # Skip the extra pre-warmup bars; only replay the requested `days`
+        # extra days × 24h × 12 bars/h = warmup bar count
+        warmup = extra * 24 * 12  # = 1152 bars (enough for all indicators)
 
-        log.info("Replaying %d bars (skip first %d warmup)…", len(timestamps), warmup)
+        log.info("Replaying %d bars (skip first %d pre-warmup)…",
+                 len(timestamps) - warmup, warmup)
 
         for i, ts in enumerate(timestamps):
             if i < warmup:
@@ -211,11 +246,16 @@ class Backtester:
 
         # Close any remaining open positions at last price
         for coin in list(self._open_sims.keys()):
-            df = self._cache.get(coin, self.EXEC_TF)
+            df = self._full_cache.get(coin, self.EXEC_TF)
             if df is not None and not df.empty:
                 last_price = float(df["close"].iloc[-1])
                 self._close_sim(coin, last_price, "end_of_test")
 
+        log.info(
+            "Pipeline probe: bars=%d  df_ok=%d  tradeable=%d  signal=%d  risk_ok=%d",
+            self._probe["bars"], self._probe["df_ok"], self._probe["tradeable"],
+            self._probe["signal"], self._probe["risk_ok"],
+        )
         await self._rest.close()
 
         return BacktestResult(
@@ -226,17 +266,24 @@ class Backtester:
         )
 
     async def _process_bar(self, coin: str, ts: int, bar_idx: int) -> None:
-        """Simulate signal evaluation and position management at bar `ts`."""
-        # Build sub-DataFrames up to this timestamp
-        df_5m = _slice_at(self._cache.get(coin, self.EXEC_TF), ts, 100)
-        df_15m = _slice_at(self._cache.get(coin, self.REGIME_TF), ts, 100)
+        """
+        Simulate signal evaluation and position management at bar `ts`.
+
+        _full_cache is never modified — it's the immutable history source.
+        _replay_cache is seeded with sliced data per bar for RegimeEngine.
+        """
+        # Slice from the IMMUTABLE full-history cache
+        df_5m = _slice_at(self._full_cache.get(coin, self.EXEC_TF), ts, 100)
+        df_15m = _slice_at(self._full_cache.get(coin, self.REGIME_TF), ts, 100)
         df_1h_btc = _slice_at(
-            self._cache.get(self._cfg.global_symbol, self.GLOBAL_TF), ts, 100
+            self._full_cache.get(self._cfg.global_symbol, self.GLOBAL_TF), ts, 100
         )
 
+        self._probe["bars"] += 1
         if df_5m is None or len(df_5m) < 55:
             return
 
+        self._probe["df_ok"] += 1
         current_price = float(df_5m["close"].iloc[-1])
 
         # ── Monitor open position ──────────────────────────────────────────
@@ -244,14 +291,12 @@ class Backtester:
             self._monitor_sim(coin, current_price, bar_idx)
             return  # don't look for new entry while in position
 
-        # ── Regime ────────────────────────────────────────────────────────
-        # Temporarily seed the sliced data for regime/strategy computation
+        # ── Seed replay_cache with this bar's slice ──────────────────────
+        # RegimeEngine reads from _replay_cache, so it sees the "current" view
         if df_15m is not None:
-            self._cache.seed(coin, self.REGIME_TF, _df_to_bars(df_15m))
+            self._replay_cache.seed(coin, self.REGIME_TF, _df_to_bars(df_15m))
         if df_1h_btc is not None:
-            self._cache.seed(self._cfg.global_symbol, self.GLOBAL_TF, _df_to_bars(df_1h_btc))
-        # Seed 5m slice
-        self._cache.seed(coin, self.EXEC_TF, _df_to_bars(df_5m))
+            self._replay_cache.seed(self._cfg.global_symbol, self.GLOBAL_TF, _df_to_bars(df_1h_btc))
 
         global_ctx = self._regime.global_bias()
         regime = self._regime.classify(coin)
@@ -259,6 +304,7 @@ class Backtester:
         if not RegimeEngine.is_tradeable(regime):
             return
 
+        self._probe["tradeable"] += 1
         # ── Strategy ──────────────────────────────────────────────────────
         signal = None
         if regime.regime == MarketRegime.TREND:
@@ -269,10 +315,13 @@ class Backtester:
         if signal is None:
             return
 
+        self._probe["signal"] += 1
         # ── Risk ──────────────────────────────────────────────────────────
         verdict = self._risk.check_entry(coin, signal.direction, signal.r_distance)
         if not verdict.allowed:
             return
+
+        self._probe["risk_ok"] += 1
 
         # ── Open simulated position ────────────────────────────────────────
         pattern = getattr(signal, "pattern", "SIGNAL")
@@ -523,4 +572,8 @@ async def _main() -> None:
 
 
 if __name__ == "__main__":
+    # Windows: aiohttp/aiodns requires SelectorEventLoop (not the default ProactorEventLoop)
+    import sys
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(_main())

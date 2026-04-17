@@ -138,14 +138,19 @@ class Config:
     trend_trail_atr_mult: float = field(
         default_factory=lambda: _float("TREND_TRAIL_ATR_MULT", 2.0)
     )
-    # FIX #5: raise ADX minimum (was 22)
+    # 5m ADX minimum for strategy entry. Lower than adx_trend_threshold (27)
+    # because the regime engine already guarantees 15m ADX >= 27 for TREND regime;
+    # double-checking on 5m at 27 is too strict — 5m ADX oscillates in strong trends.
     trend_min_adx: float = field(
-        default_factory=lambda: _float("TREND_MIN_ADX", 27.0)
+        default_factory=lambda: _float("TREND_MIN_ADX", 20.0)
     )
 
-    # FIX #3: minimum R:R gate — without this you can't have positive expectancy
+    # FIX #3: minimum R:R gate on partial TP level.
+    # partial TP = entry +/- r_dist * trend_partial_tp_r = 1.5R  -> rr = 1.5.
+    # Gate must be < 1.5 or it always blocks (1.5 < 2.0 = True -> always None).
+    # Trailing stop on remaining 50% brings blended R:R to ~2.0+.
     min_rr_trend: float = field(
-        default_factory=lambda: _float("MIN_RR_TREND", 2.0)
+        default_factory=lambda: _float("MIN_RR_TREND", 1.4)
     )
 
     # FIX #4: swing lookback (was hardcoded 10 = 50 min noise)

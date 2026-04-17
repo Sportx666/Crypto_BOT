@@ -382,6 +382,9 @@ async def _async_main() -> None:
 
 
 def main() -> None:
+    # Windows: aiohttp/aiodns requires SelectorEventLoop
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(_async_main())
 
 
