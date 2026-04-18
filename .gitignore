@@ -6,6 +6,11 @@ __pycache__/
 # Logs & data
 *.log
 *.sqlite*
+data/journal.jsonl
+data/state.json
+data/bot.log
+# keep the directory itself
+!data/.gitkeep
 # Editors
 .vscode/
 .idea/

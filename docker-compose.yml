@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  cryptobot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cryptobot
+    restart: unless-stopped
+
+    # All secrets injected via env file (never baked into image)
+    env_file:
+      - .env
+
+    volumes:
+      # Persist journal, state, and logs across restarts
+      - ./data:/app/data
+
+    # No ports needed – outbound-only trading bot
+    network_mode: host     # simplest for VPS; use bridge + DNS if preferred
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+    # Resource limits (tune to your VPS)
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    # Graceful shutdown: send SIGTERM, wait 30s before SIGKILL
+    stop_grace_period: 30s
