@@ -5,7 +5,7 @@ from misc.config import *
 def place_order(params):    
     
     try:
-        order = client.ws_create_otoco_order(**params)
+        order = safe_binance_call(client.ws_create_otoco_order, default=None, **params)
         return {"status": "success", "data": order}
     except Exception as e:
         return {"status": "error", "message": str(e)}

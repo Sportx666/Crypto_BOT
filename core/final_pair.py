@@ -1,4 +1,4 @@
-from misc.config import config, client, logging
+from misc.config import config, client, logging, safe_binance_call
 from core.indicator import calculate_indicators
 from utilities.binance_call import fetch_data
 
@@ -93,7 +93,7 @@ def calculate_trade_suggestion(pair, entry, support, resistance, atr, bollinger,
 
     # Fetch real-time order book data
     try:
-        order_book = client.get_order_book(symbol=pair)
+        order_book = safe_binance_call(client.get_order_book, default={}, symbol=pair)
         best_ask = float(order_book['asks'][0][0]) if order_book['asks'] else None
         best_bid = float(order_book['bids'][0][0]) if order_book['bids'] else None
     except Exception as e:

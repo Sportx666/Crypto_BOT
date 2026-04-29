@@ -56,7 +56,7 @@ import pandas as pd
 
 # ── project imports ───────────────────────────────────────────────────────────
 from misc.config import (
-    client, config, indicator_cache_lock, logging as bot_logger
+    client, config, indicator_cache_lock, logging as bot_logger, safe_binance_call
 )
 from core.indicator import calculate_indicators
 from strategy.dynamic_trend_breakout import DynamicTrendBreakoutStrategy
@@ -160,7 +160,7 @@ def fetch_history(
                 if end_ts:
                     kwargs["endTime"] = end_ts
 
-                klines = client.get_klines(**kwargs)
+                klines = safe_binance_call(client.get_klines, default=[], **kwargs)
                 if not klines:
                     break
 
@@ -487,8 +487,8 @@ class BacktestEngine:
         """
         try:
             from utilities.pair_quality import filter_quality_pairs
-            tickers       = client.get_ticker()
-            exchange_info = client.get_exchange_info()
+            tickers       = safe_binance_call(client.get_ticker, default=[])
+            exchange_info = safe_binance_call(client.get_exchange_info, default=[])
             trading_syms  = {
                 s['symbol']
                 for s in exchange_info['symbols']

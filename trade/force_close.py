@@ -14,7 +14,7 @@ def close_orders():
     quantity = 0
     
     try:
-        open_trades = client.get_open_orders()
+        open_trades = safe_binance_call(client.get_open_orders, default=[])
         for order in open_trades:
             if order['orderId'] != 'PENDING_NEW':    
                 order_id = order['orderId']
@@ -26,7 +26,7 @@ def close_orders():
 
                 # Cancel all orders
                 try:                
-                    client.cancel_order(orderId=order_id, symbol=pair)
+                    safe_binance_call(client.cancel_order, default=None, orderId=order_id, symbol=pair)
                     gui.add_to_console(f"Order {order_id} for pair {pair} canceled.")   
                     break                                     
                 except Exception as e:

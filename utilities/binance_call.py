@@ -8,7 +8,7 @@ Changes vs original:
 """
 
 from datetime import datetime, timedelta
-from misc.config import config, client, logging, blacklist
+from misc.config import config, client, logging, blacklist, safe_binance_call
 import pandas as pd
 
 from core.shared_state import get_gui_instance
@@ -28,8 +28,8 @@ def filter_active_pairs():
     global blacklist
 
     try:
-        tickers       = client.get_ticker()
-        exchange_info = client.get_exchange_info()
+        tickers       = safe_binance_call(client.get_ticker, default=[])
+        exchange_info = safe_binance_call(client.get_exchange_info, default=[])
 
         trading_symbols = {
             s['symbol']
@@ -51,11 +51,7 @@ def filter_active_pairs():
 def fetch_data(pair, timeframe=config["TIMEFRAME"], limit=config["CANDLES_LIMIT"]):
     """Fetch historical OHLCV data for a given pair and timeframe."""
     try:
-        klines = client.get_klines(
-            symbol=pair,
-            interval=timeframe,
-            limit=limit,
-        )
+        klines = safe_binance_call(client.get_klines, default=[], symbol=pair, interval=timeframe, limit=limit)
         df = pd.DataFrame(klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -112,7 +108,7 @@ def close_market_trade(pair: str, quantity: float):
     """Place an emergency market sell order to close a position."""
     gui = get_gui_instance()
     try:
-        market_order = client.order_market_sell(symbol=pair, quantity=quantity)
+        market_order = safe_binance_call(client.order_market_sell, default=None, symbol=pair, quantity=quantity)
         gui.update_trade_details_table([{
             "symbol":        market_order["symbol"],
             "transactTime":  market_order["transactTime"],

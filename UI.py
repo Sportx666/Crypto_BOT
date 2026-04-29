@@ -1075,7 +1075,7 @@ class CryptoBotGUI:
     def exit_bot(self):
         """Quit button handler."""
         try:
-            client.session.close()
+            safe_binance_call(client.close)  # close Binance session if open
         except Exception as e:
             self.add_to_console(f"Error closing session: {e}")
         global is_running, trade_counter

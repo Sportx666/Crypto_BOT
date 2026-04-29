@@ -2,8 +2,11 @@ import json
 from pathlib import Path
 from threading import Lock
 from binance.client import Client
+from binance.exceptions import BinanceAPIException, BinanceRequestException
 import logging
 import os
+import requests
+import time
 from typing import Optional
 from env_loader import load_env
 
@@ -58,6 +61,28 @@ class _LazyBinanceClient:
 
 
 client = _LazyBinanceClient()
+
+def safe_binance_call(func, *args, retries=3, delay=5, default=None, **kwargs):
+    for attempt in range(1, retries + 1):
+        try:
+            return func(*args, **kwargs)
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, BinanceRequestException) as e:
+            print(f"[WARN] Binance connection issue {attempt}/{retries}: {e}")
+
+            if attempt < retries:
+                time.sleep(delay)
+
+        except BinanceAPIException as e:
+            print(f"[ERROR] Binance API error: {e}")
+            return default
+
+        except Exception as e:
+            print(f"[ERROR] Unexpected Binance error: {e}")
+            return default
+
+    print("[ERROR] Binance unreachable. Skipping this cycle.")
+    return default
 
 
 trade_counter = 0

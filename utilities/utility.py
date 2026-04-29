@@ -106,12 +106,12 @@ def update_trading_table():
         for order_id, symbol in placed_order_ids.items():
             try:
                 # Fetch latest price
-                ticker = client.get_symbol_ticker(symbol=symbol)
+                ticker = safe_binance_call(client.get_symbol_ticker, default={}, symbol=symbol)
                 current_price = float(ticker['price'])
                 gui.update_current_price(current_price)
 
                 # Fetch order status
-                order_status = client.get_order(orderId=order_id, symbol=symbol)
+                order_status = safe_binance_call(client.get_order, default={}, orderId=order_id, symbol=symbol)
                 status = order_status['status']
                 
                 if status == 'FILLED':

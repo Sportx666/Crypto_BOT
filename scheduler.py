@@ -51,7 +51,7 @@ def scheduled_routine():
         if len(placed_order_ids) == 0:
             trade_timer_seconds = 0
             gui.update_trade_timer(trade_timer_seconds)
-            open_trades = client.get_open_orders()
+            open_trades = safe_binance_call(client.get_open_orders, default=[])
 
             if not open_trades:
                 gui.add_to_console("No open trades. Resuming routine…")

@@ -43,7 +43,7 @@ def place_trade(best_pair):
     # Fetch account balance
     try:
         # Get account details
-        account_info = client.get_account()
+        account_info = safe_binance_call(client.get_account, default={})
         # Find the available balance for the quote currency (e.g., USDT)
         available_funds = next(
             (float(asset['free']) for asset in account_info['balances'] if asset['asset'] == 'USDT'),
@@ -60,7 +60,7 @@ def place_trade(best_pair):
     
     # Adjust TP/SL to comply with PRICE_FILTER
     try:
-        exchange_info = client.get_exchange_info()
+        exchange_info = safe_binance_call(client.get_exchange_info, default=[])
         symbol_info = next(
             symbol for symbol in exchange_info['symbols'] if symbol['symbol'] == pair
         )
@@ -83,7 +83,7 @@ def place_trade(best_pair):
     # Ensure quantity meets Binance's minimum trading requirements
     try:
         # Fetch exchange info
-        exchange_info = client.get_exchange_info()
+        exchange_info = safe_binance_call(client.get_exchange_info, default=[])
         
         # Find the specific symbol info
         symbol_info = next(
@@ -162,7 +162,7 @@ def place_trade(best_pair):
         
         # Path to the worker script
         # Run the worker script
-        order = client.ws_create_otoco_order(**params)
+        order = safe_binance_call(client.ws_create_otoco_order, default=None, **params)
         #process = subprocess.Popen(
         #    ["python", worker_script],
         #    stdin=subprocess.PIPE,
