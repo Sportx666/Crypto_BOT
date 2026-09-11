@@ -1,0 +1,12 @@
+.venv/
+.git/
+.claude/
+.vscode/
+__pycache__/
+*.pyc
+historical_data/
+logs/*.log
+data/*.json
+data/*.jsonl
+backtest_results.csv
+*.log

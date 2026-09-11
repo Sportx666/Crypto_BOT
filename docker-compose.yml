@@ -36,3 +36,45 @@ services:
 
     # Graceful shutdown: send SIGTERM, wait 30s before SIGKILL
     stop_grace_period: 30s
+
+  binance-bot:
+    build:
+      context: .
+      dockerfile: docker/binance/Dockerfile
+    container_name: binance-bot
+    restart: unless-stopped
+
+    # Same .env file — this bot reads BINANCE_API_KEY / BINANCE_API_SECRET,
+    # the HL service reads HL_WALLET_ADDRESS / HL_PRIVATE_KEY. No overlap.
+    env_file:
+      - .env
+    environment:
+      # Set VNC_PASSWORD in .env — do not deploy with the "changeme" default.
+      - VNC_PASSWORD=${VNC_PASSWORD:-changeme}
+
+    volumes:
+      - ./logs:/app/logs
+      - ./misc/blacklist.json:/app/misc/blacklist.json
+      - ./misc/trade_counter.json:/app/misc/trade_counter.json
+
+    # VNC only — bind to localhost and reach it over an SSH tunnel
+    # (ssh -L 5900:localhost:5900 user@vps) rather than exposing 0.0.0.0:5900
+    # to the internet with just a VNC password guarding real trading funds.
+    ports:
+      - "127.0.0.1:5900:5900"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          memory: 256M
+
+    stop_grace_period: 30s

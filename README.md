@@ -64,18 +64,59 @@ python -m bot.main
 
 ### 3. Docker (recommended for VPS)
 
+`docker-compose.yml` defines two independent services — bring up only the ones you need:
+
+- **`cryptobot`** – the headless HL engine above. No exposed ports; check on it via
+  logs / `data/state.json` (see [Monitoring](#monitoring)).
+- **`binance-bot`** – the legacy Binance spot bot, running its Tkinter GUI (`UI.py`)
+  behind a virtual display, exposed over VNC so you can watch/interact with it
+  from anywhere (see [Accessing the GUI on a VPS](#accessing-the-gui-on-a-vps)).
+
 ```bash
-# Build
+# Build both images
 docker compose build
 
-# Run (dry-run on testnet – safe to start)
+# Run everything (dry-run on testnet – safe to start)
 docker compose up -d
+
+# ...or just one service
+docker compose up -d cryptobot
+docker compose up -d binance-bot
 
 # Follow logs
 docker compose logs -f cryptobot
+docker compose logs -f binance-bot
 
 # Stop gracefully
 docker compose stop
+```
+
+Before deploying `binance-bot`, set a real `VNC_PASSWORD` in `.env` (see
+`.env.example`) — it defaults to `changeme`, which is not safe to leave in place
+on a VPS.
+
+---
+
+## Accessing the GUI on a VPS
+
+`binance-bot`'s GUI only listens on `127.0.0.1:5900` inside the VPS — it is never
+exposed to the internet directly. Reach it over an SSH tunnel:
+
+```bash
+# From your local machine
+ssh -L 5900:localhost:5900 <user>@<vps-ip>
+```
+
+Leave that terminal open, then point any VNC client (TigerVNC, RealVNC Viewer,
+macOS Screen Sharing at `vnc://localhost:5900`, etc.) at `localhost:5900` and log
+in with the `VNC_PASSWORD` from `.env`. You'll see the same dark-mode GUI as
+running locally — trades tab, P&L, balance, backtest tab — updating live.
+
+Quick health check without opening a VNC client at all:
+
+```bash
+docker compose ps binance-bot          # container + healthcheck status
+docker compose logs --tail=50 binance-bot
 ```
 
 ---

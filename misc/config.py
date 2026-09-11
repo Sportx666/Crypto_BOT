@@ -4,6 +4,7 @@ from threading import Lock
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceRequestException
 import logging
+import logging.handlers
 import os
 import requests
 import time
@@ -67,17 +68,64 @@ def safe_binance_call(func, *args, retries=3, delay=5, default=None, **kwargs):
         try:
             return func(*args, **kwargs)
 
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, BinanceRequestException) as e:
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.ChunkedEncodingError,
+            BinanceRequestException,
+        ) as e:
             print(f"[WARN] Binance connection issue {attempt}/{retries}: {e}")
 
             if attempt < retries:
-                time.sleep(delay)
+                time.sleep(delay * attempt)
+                continue
 
         except BinanceAPIException as e:
+            msg = str(e).lower()
+
+            # Binance sometimes returns HTML/500 instead of valid JSON
+            retryable = any(x in msg for x in [
+                "invalid json",
+                "500 internal server error",
+                "502",
+                "503",
+                "504",
+                "timeout",
+                "connection",
+            ])
+
+            if retryable:
+                print(f"[WARN] Temporary Binance API issue {attempt}/{retries}: {e}")
+
+                if attempt < retries:
+                    time.sleep(delay * attempt)
+                    continue
+
             print(f"[ERROR] Binance API error: {e}")
             return default
 
         except Exception as e:
+            msg = str(e).lower()
+
+            retryable = any(x in msg for x in [
+                "connection aborted",
+                "connection reset",
+                "forcibly closed",
+                "connection broken",
+                "failed to resolve",
+                "getaddrinfo failed",
+                "max retries exceeded",
+                "invalid json",
+                "500 internal server error",
+            ])
+
+            if retryable:
+                print(f"[WARN] Temporary Binance error {attempt}/{retries}: {e}")
+
+                if attempt < retries:
+                    time.sleep(delay * attempt)
+                    continue
+
             print(f"[ERROR] Unexpected Binance error: {e}")
             return default
 
@@ -105,7 +153,7 @@ config = {
     "SMA_FILTER_LENGTH":     110,   # ← was 130; aligned to HULL_LENGTH*2 (55*2)
 
     # ── Pair selection ────────────────────────────────────────────────────────
-    "MIN_VOLUME":            50_000_000,   # ← was 20M; blocks meme coins
+    "MIN_VOLUME":            500_000,   # ← was 20M; blocks meme coins
     "MIN_TRADES_24H":        50_000,       # NEW: minimum real trades (anti-washtrading)
     "MAX_24H_CHANGE_PCT":    20.0,         # NEW: skip pump/dump already in progress
     "MAX_SPREAD_PCT":        0.0006,
@@ -215,17 +263,21 @@ skip_reason_descriptions = {
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)  # Create logs directory if it doesn't exist
 
-logging.basicConfig(
-    filename=f'{script_dir}\\logs\\trading_bot.log',  # Log file name
-    level=logging.INFO,         # Minimum log level
-    format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
-    datefmt='%Y-%m-%d %H:%M:%S'  # Timestamp format
+_root_handler = logging.handlers.RotatingFileHandler(
+    filename=str(LOG_DIR / "trading_bot.log"),
+    maxBytes=10 * 1024 * 1024,  # 10 MB per file
+    backupCount=5,               # keep trading_bot.log.1 .. .5
+    encoding="utf-8",
 )
+_root_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+))
+logging.basicConfig(level=logging.INFO, handlers=[_root_handler])
 
 # region TRADE_LOGGER
 trade_logger = logging.getLogger('trade_logger')
 trade_logger.setLevel(logging.INFO)
-trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\trade_logs.log')  # Separate file for trade logs
+trade_file_handler = logging.FileHandler(str(LOG_DIR / "trade_logs.log"))  # Separate file for trade logs
 trade_file_handler.setLevel(logging.INFO)
 trade_formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 trade_file_handler.setFormatter(trade_formatter)
@@ -235,7 +287,7 @@ trade_logger.addHandler(trade_file_handler)
 # region DETAILED_TRADE_LOGGER
 detailed_trade_logger = logging.getLogger('detailed_trade_logger')
 detailed_trade_logger.setLevel(logging.INFO)
-detailed_trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\detailed_trade_logs.log')
+detailed_trade_file_handler = logging.FileHandler(str(LOG_DIR / "detailed_trade_logs.log"))
 detailed_trade_file_handler.setLevel(logging.INFO)
 detailed_trade_formatter = logging.Formatter('%(message)s')  # Logs only the message (no timestamp, level)
 detailed_trade_file_handler.setFormatter(detailed_trade_formatter)
@@ -245,7 +297,7 @@ detailed_trade_logger.addHandler(detailed_trade_file_handler)
 # region TRADE_SKIP_LOGGER
 skip_trade_logger = logging.getLogger('skip_trade_logger')
 skip_trade_logger.setLevel(logging.INFO)
-skip_trade_file_handler = logging.FileHandler(f'{script_dir}\\logs\\skip_trade_logs.log')
+skip_trade_file_handler = logging.FileHandler(str(LOG_DIR / "skip_trade_logs.log"))
 skip_trade_file_handler.setLevel(logging.INFO)
 skip_trade_formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')  # Logs only the message 
 skip_trade_file_handler.setFormatter(skip_trade_formatter)

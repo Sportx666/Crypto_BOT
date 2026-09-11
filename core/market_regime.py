@@ -305,11 +305,15 @@ def apply_regime_to_config(base_config: dict, regime: str) -> dict:
     cfg["VOLUME_SPIKE_THRESHOLD"]   = cfg.get("VOLUME_SPIKE_THRESHOLD",   2.0) * vsm
     cfg["ALLOW_PARTIAL_CONFIRMATION"] = overrides["allow_partial"]
 
-    rr_min, rr_max = cfg.get("RR_THRESHOLD", [1.3, 3.0])
-    rr_max_override = overrides.get("rr_max_override", rr_max)
-    cfg["RR_THRESHOLD"] = [rr_min * rrm, rr_max_override]
+    rr_threshold = cfg.get("RR_THRESHOLD", [1.3, 3.0])
+    rr_min = float(rr_threshold[0])
+    rr_max = float(rr_threshold[1])
+    rr_max_override = float(overrides.get("rr_max_override", rr_max))
+    cfg["RR_THRESHOLD"] = [rr_min * float(rrm), rr_max_override]
 
-    adx_min, adx_max = cfg.get("ADX_BOUNDS", [20, 65])
+    adx_threshold = cfg.get("ADX_BOUNDS", [20, 65])
+    adx_min = float(adx_threshold[0])
+    adx_max = float(adx_threshold[1])
     cfg["ADX_BOUNDS"] = [adx_min + adx_add, adx_max]
 
     # Regime-aware TP multiplier: strategy reads TP_BUFFER_MULTIPLIER from config.
