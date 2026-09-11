@@ -209,6 +209,8 @@ class HLWebSocket:
     # ── Internals ─────────────────────────────────────────────────────────
 
     async def _connect_and_run(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
         self._session = aiohttp.ClientSession()
         log.info("WS connecting to %s", self._url)
         async with self._session.ws_connect(

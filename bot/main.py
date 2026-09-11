@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import logging.handlers
 import os
 import signal
 import sys
@@ -38,12 +39,15 @@ log = logging.getLogger(__name__)
 
 def setup_logging(level: str) -> None:
     fmt = "%(asctime)s %(levelname)-8s %(name)-20s %(message)s"
+    file_handler = logging.handlers.RotatingFileHandler(
+        "data/bot.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format=fmt,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler("data/bot.log", encoding="utf-8"),
+            file_handler,
         ],
     )
     # Quiet noisy libraries

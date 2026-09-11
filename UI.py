@@ -13,6 +13,8 @@ Requires:  pip install customtkinter matplotlib
 # ── stdlib ────────────────────────────────────────────────────────────────────
 from collections import defaultdict
 from datetime import datetime
+import logging
+import os
 import re
 import threading
 import time
@@ -178,10 +180,10 @@ class CryptoBotGUI:
         _apply_dark_treeview_style(self.root)
 
         # ── log file paths ────────────────────────────────────────────────────
-        self.log_file_path          = f'{script_dir}\\logs\\trading_bot.log'
-        self.trade_log_path         = f'{script_dir}\\logs\\trade_logs.log'
-        self.detailed_trade_log_path= f'{script_dir}\\logs\\detailed_trade_logs.log'
-        self.skip_trade_log_path    = f'{script_dir}\\logs\\skip_trade_logs.log'
+        self.log_file_path          = os.path.join(script_dir, "logs", "trading_bot.log")
+        self.trade_log_path         = os.path.join(script_dir, "logs", "trade_logs.log")
+        self.detailed_trade_log_path= os.path.join(script_dir, "logs", "detailed_trade_logs.log")
+        self.skip_trade_log_path    = os.path.join(script_dir, "logs", "skip_trade_logs.log")
 
         # ── internal state ────────────────────────────────────────────────────
         self._is_running = False
@@ -215,6 +217,9 @@ class CryptoBotGUI:
         self._build_log_files_tab()
         self._build_pnl_tab()
         self._build_backtest_tab()
+
+        # ── kick off balance polling (fetch now, then every 60s) ───────────────
+        self.root.after(200, self._schedule_balance_refresh)
 
 
     # ╔══════════════════════════════════════════════════════════════════════════
@@ -430,6 +435,29 @@ class CryptoBotGUI:
         )
         self.avoid_pair.pack(side="left", padx=4, pady=8)
 
+        # ── account balance (right-aligned, left of status) ────────────────────
+        balance_area = ctk.CTkFrame(bar, fg_color=C["bg3"], corner_radius=8)
+        balance_area.pack(side="right", padx=(8, 16), pady=6, ipadx=8, ipady=2)
+
+        ctk.CTkLabel(balance_area, text="💰",
+                     font=CTkFont("Segoe UI", 12)).pack(side="left", padx=(6, 2))
+
+        self.balance_label = ctk.CTkLabel(
+            balance_area, text="Balance: —",
+            font=CTkFont("Segoe UI", 11, "bold"),
+            text_color=C["text_dim"],
+        )
+        self.balance_label.pack(side="left", padx=(0, 4))
+
+        self.balance_refresh_button = CompatButton(
+            balance_area, text="⟳", width=28, height=24,
+            corner_radius=6, font=CTkFont("Segoe UI", 11, "bold"),
+            fg_color=C["bg4"], hover_color=C["accent"],
+            text_color=C["text"],
+            command=lambda: self._fetch_balance(),
+        )
+        self.balance_refresh_button.pack(side="left", padx=(0, 6), pady=2)
+
         # ── status light (right-aligned) ──────────────────────────────────────
         status_area = ctk.CTkFrame(bar, fg_color="transparent")
         status_area.pack(side="right", padx=16, pady=8)
@@ -460,6 +488,44 @@ class CryptoBotGUI:
             font=CTkFont("Segoe UI", 10), text_color=C["text_dim"],
         )
         self.trade_number_label.pack(anchor="e")
+
+
+    # ╔══════════════════════════════════════════════════════════════════════════
+    # ║  Account balance
+    # ╚══════════════════════════════════════════════════════════════════════════
+    def _fetch_balance(self):
+        """Fetch USDT account balance from Binance in a background thread
+        (network call) and update the label on the main thread."""
+        self.balance_refresh_button.configure(state="disabled")
+        self.balance_label.configure(text="Balance: fetching…", text_color=C["text_dim"])
+
+        def _work():
+            try:
+                account_info = safe_binance_call(client.get_account, default={})
+                balances = account_info.get("balances", [])
+                free = next((float(a["free"]) for a in balances if a["asset"] == "USDT"), 0.0)
+                locked = next((float(a["locked"]) for a in balances if a["asset"] == "USDT"), 0.0)
+                self.root.after(0, lambda: self._display_balance(free, locked))
+            except Exception as exc:
+                logging.error(f"Error fetching account balance: {exc}")
+                self.root.after(0, lambda e=exc: self._display_balance(None, None, error=e))
+
+        threading.Thread(target=_work, daemon=True, name="BalanceFetch").start()
+
+    def _display_balance(self, free, locked, error=None):
+        self.balance_refresh_button.configure(state="normal")
+        if error is not None:
+            self.balance_label.configure(text="Balance: unavailable", text_color=C["danger"])
+            return
+        total = free + locked
+        text = f"Balance: {free:,.2f} USDT"
+        if locked:
+            text += f"  ({locked:,.2f} in orders)"
+        self.balance_label.configure(text=text, text_color=C["success"])
+
+    def _schedule_balance_refresh(self):
+        self._fetch_balance()
+        self.root.after(60_000, self._schedule_balance_refresh)
 
 
     # ╔══════════════════════════════════════════════════════════════════════════
@@ -1108,7 +1174,14 @@ class CryptoBotGUI:
                         else:
                             config[var] = tuple(map(int, value.split(',')))
                     elif isinstance(config[var], list):
-                        config[var] = value.split(',')
+                        items = [v.strip() for v in value.split(',')]
+                        orig = config[var]
+                        if orig and isinstance(orig[0], int):
+                            config[var] = [int(v) for v in items]
+                        elif orig and isinstance(orig[0], float):
+                            config[var] = [float(v) for v in items]
+                        else:
+                            config[var] = items
                     else:
                         config[var] = value
                 except ValueError:

@@ -423,16 +423,6 @@ class RiskManager:
             self._trades_today = 0
             self._trades_day_key = today
 
-    def record_partial_close(self, coin: str, price: float, close_size: float) -> Optional[float]:
-        """Record P&L for a partial close without removing the position."""
-        pos = self._positions.get(coin)
-        if pos is None:
-            return None
-        pnl = pos.direction * (price - pos.entry_price) * close_size
-        self._loss_tracker.record(pnl)
-        self._check_loss_limits()
-        return pnl
-
     def _maybe_resume_from_loss_reset(self) -> None:
         if not self._halted or not self._halt_auto_resume or self._equity <= 0:
             return
